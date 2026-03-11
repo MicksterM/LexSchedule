@@ -281,7 +281,7 @@ const ROUTER = {
     const route = base || '';
 
     // Public routes
-    if (route === 'respond' && parts[0]) { return VIEWS.respond(parts[0]); }
+    if (route === 'respond' && parts[0]) { return VIEWS.respond(parts[0], parts[1], parts[2]); }
     if (route === '' || route === 'landing') {
       return S.user ? ROUTER.go('/dashboard') : VIEWS.landing();
     }
@@ -484,7 +484,8 @@ const EMAIL = {
   // Build the respond URL for a participant token
   _respondUrl(token, eventId) {
     const base = window.location.href.split('#')[0];
-    return `${base}#/respond/${token}/${eventId}`;
+    const firmId = _firmId();
+    return `${base}#/respond/${token}/${eventId}/${firmId}`;
   },
 
   sendInvitations(eventId) {
@@ -2227,12 +2228,45 @@ const VIEWS = {
 
 
   /* ── Respond Page (public) ── */
-  respond(token) {
+  respond(token, eventId, firmId) {
     S.view = 'respond';
     let ev = null, participant = null;
+    // First try in-memory events (logged-in user)
     for (const e of S.events) {
       const p = e.participants.find(x=>x.token===token);
       if (p) { ev = e; participant = p; break; }
+    }
+    // If not found and we have firmId+eventId, load from Firestore
+    if (!ev && eventId && firmId) {
+      render(`<div class="loading-screen"><div class="spinner"></div><p class="loading-text">Loading invitation…</p></div>`);
+      db.collection('firms').doc(firmId).collection('events').doc(eventId).get().then(doc => {
+        if (!doc.exists) {
+          render(`<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F6F1E9;">
+            <div style="text-align:center;padding:40px;"><h2 style="font-family:'Cormorant Garamond',serif;font-size:1.8rem;color:#0B1F3A;margin-bottom:12px;">Invitation Not Found</h2>
+            <p style="font-size:.9rem;color:#6B7280;">This scheduling link is invalid or has expired. Please contact the scheduling coordinator.</p></div>
+          </div>`);
+          return;
+        }
+        const loadedEv = doc.data();
+        const loadedP  = loadedEv.participants.find(x=>x.token===token);
+        if (!loadedP) {
+          render(`<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F6F1E9;">
+            <div style="text-align:center;padding:40px;"><h2 style="font-family:'Cormorant Garamond',serif;font-size:1.8rem;color:#0B1F3A;margin-bottom:12px;">Invitation Not Found</h2>
+            <p style="font-size:.9rem;color:#6B7280;">This scheduling link is invalid or has expired.</p></div>
+          </div>`);
+          return;
+        }
+        // Cache for RESPOND_toggleSlot and RESPOND_submit
+        if (!window._respondCache) window._respondCache = {};
+        window._respondCache[token] = { ev: loadedEv, firmId };
+        VIEWS._renderRespond(token, loadedEv, loadedP);
+      }).catch(() => {
+        render(`<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F6F1E9;">
+          <div style="text-align:center;padding:40px;"><h2 style="font-family:'Cormorant Garamond',serif;font-size:1.8rem;color:#0B1F3A;margin-bottom:12px;">Unable to Load Invitation</h2>
+          <p style="font-size:.9rem;color:#6B7280;">Please check your internet connection and try again.</p></div>
+        </div>`);
+      });
+      return;
     }
     if (!ev || !participant) {
       render(`<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F6F1E9;">
@@ -2241,6 +2275,10 @@ const VIEWS = {
       </div>`);
       return;
     }
+    VIEWS._renderRespond(token, ev, participant);
+  },
+
+  _renderRespond(token, ev, participant) {
     if (participant.status === 'responded' || ev.status === 'confirmed') {
       const confirmed = ev.confirmedSlot ? ev.proposedSlots.find(s=>s.id===ev.confirmedSlot) : null;
       render(VIEWS.respondThankYou(ev, participant, confirmed));
@@ -2884,7 +2922,7 @@ window.RESPOND_toggleSlot = function(token, slotId, eventId) {
   if (!window._respondState) window._respondState = {};
   if (!window._respondState[token]) window._respondState[token] = {};
   const rs = window._respondState[token];
-  const ev = S.events.find(e=>e.id===eventId);
+  const ev = S.events.find(e=>e.id===eventId) || window._respondCache?.[token]?.ev;
   const participant = ev?.participants.find(p=>p.token===token);
   const cur = rs[slotId] !== undefined ? rs[slotId] : (participant?.availability[slotId] || '');
   const next = AVAIL_CYCLE[cur];
@@ -2900,19 +2938,19 @@ window.RESPOND_toggleSlot = function(token, slotId, eventId) {
 };
 
 window.RESPOND_submit = function(token, eventId, participantId) {
-  const ev = S.events.find(e=>e.id===eventId);
+  // Get event from memory (logged-in user) or from public cache (recipient)
+  const cached  = window._respondCache?.[token];
+  const ev = S.events.find(e=>e.id===eventId) || cached?.ev;
   const p  = ev?.participants.find(x=>x.id===participantId);
   if (!ev || !p) return;
   const rs = window._respondState?.[token] || {};
   const comment = document.getElementById('rs-comment')?.value.trim();
   if (ev.mode === 'poll') {
-    // Poll mode: checked = available, unchecked = unavailable
     ev.proposedSlots.forEach(s => {
       const val = rs[s.id] !== undefined ? rs[s.id] : ((p.availability||{})[s.id]||'');
       p.availability[s.id] = val === 'available' ? 'available' : 'unavailable';
     });
   } else {
-    // Propose mode: merge cycle values
     ev.proposedSlots.forEach(s => {
       const val = rs[s.id] !== undefined ? rs[s.id] : (p.availability[s.id]||'');
       if (val) p.availability[s.id] = val;
@@ -2920,16 +2958,20 @@ window.RESPOND_submit = function(token, eventId, participantId) {
     });
   }
   p.status = 'responded';
+  ev.history = ev.history || [];
   if (comment) {
-    ev.history = ev.history || [];
     ev.history.push({ ts: Date.now(), action: `${p.name} responded with note: "${comment}"`, user: p.name });
   } else {
-    EMAIL.addHistory(eventId, `${p.name} submitted availability`);
+    ev.history.push({ ts: Date.now(), action: `${p.name} submitted availability`, user: 'System' });
   }
-  STORE.save();
   delete (window._respondState||{})[token];
-  AVAIL.checkAutoConfirm(eventId);
-  STORE.save();
+  // Save: either via STORE (logged in) or directly to Firestore (public recipient)
+  if (S.user) {
+    AVAIL.checkAutoConfirm(eventId);
+    STORE.save();
+  } else if (cached?.firmId) {
+    db.collection('firms').doc(cached.firmId).collection('events').doc(eventId).set(ev).catch(console.error);
+  }
   const confirmed = ev.confirmedSlot ? ev.proposedSlots.find(s=>s.id===ev.confirmedSlot) : null;
   render(VIEWS.respondThankYou(ev, p, confirmed));
 };
