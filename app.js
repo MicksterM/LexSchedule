@@ -1050,7 +1050,8 @@ const AUTH = {
         createdAt: Date.now()
       };
       await db.collection('userProfiles').doc(cred.user.uid).set(profile);
-      await cred.user.sendEmailVerification();
+      const actionCodeSettings = { url: 'https://micksterm.github.io/lexschedule/#/login' };
+      await cred.user.sendEmailVerification(actionCodeSettings);
       S.pendingVerify = { email: data.email, name: data.name };
       await fbAuth.signOut();
       return 'ok';
@@ -2514,7 +2515,7 @@ window.AUTH_verify = async function() {
 window.AUTH_resendCode = async function() {
   const fbUser = fbAuth.currentUser;
   if (fbUser) {
-    await fbUser.sendEmailVerification();
+    await fbUser.sendEmailVerification({ url: 'https://micksterm.github.io/lexschedule/#/login' });
     toast('A new verification email has been sent.', 'success', 5000);
   } else {
     toast('Please sign in again to resend verification.', 'warning', 5000);
