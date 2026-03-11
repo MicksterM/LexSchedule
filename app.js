@@ -1023,11 +1023,6 @@ const AUTH = {
   async login(email, pass) {
     try {
       const cred = await fbAuth.signInWithEmailAndPassword(email, pass);
-      if (!cred.user.emailVerified) {
-        S.pendingVerify = { email: cred.user.email, name: '' };
-        await fbAuth.signOut();
-        return 'unverified';
-      }
       const doc = await db.collection('userProfiles').doc(cred.user.uid).get();
       if (!doc.exists) { await fbAuth.signOut(); return false; }
       S.user = doc.data();
@@ -1050,10 +1045,8 @@ const AUTH = {
         createdAt: Date.now()
       };
       await db.collection('userProfiles').doc(cred.user.uid).set(profile);
-      const actionCodeSettings = { url: 'https://micksterm.github.io/lexschedule/#/login' };
-      await cred.user.sendEmailVerification(actionCodeSettings);
-      S.pendingVerify = { email: data.email, name: data.name };
-      await fbAuth.signOut();
+      S.user = profile;
+      await STORE.load();
       return 'ok';
     } catch(e) {
       if (e.code === 'auth/email-already-in-use') return 'email-exists';
@@ -2483,8 +2476,8 @@ window.AUTH_register = async function() {
   });
   if (result === 'email-exists') return showErr('An account with this email address already exists.');
 
-  toast(`Almost there, ${name.split(' ')[0]}! Please check your email for a verification link.`, 'info', 6000);
-  ROUTER.go('/verify');
+  toast(`Welcome to LexSchedule, ${name.split(' ')[0]}!`, 'success');
+  ROUTER.go('/dashboard');
 };
 
 window.AUTH_verify = async function() {
@@ -3481,7 +3474,7 @@ window.toast  = toast;
 /* ── Init ─────────────────────────────────────────────── */
 function _appInit() {
   fbAuth.onAuthStateChanged(async (firebaseUser) => {
-    if (firebaseUser && firebaseUser.emailVerified) {
+    if (firebaseUser) {
       const doc = await db.collection('userProfiles').doc(firebaseUser.uid).get();
       if (doc.exists) {
         S.user = doc.data();
