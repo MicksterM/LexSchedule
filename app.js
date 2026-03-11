@@ -3478,17 +3478,24 @@ window.modal  = modal;
 window.toast  = toast;
 
 /* ── Init ─────────────────────────────────────────────── */
+let _routerReady = false;
 function _appInit() {
   fbAuth.onAuthStateChanged(async (firebaseUser) => {
-    if (firebaseUser) {
-      const doc = await db.collection('userProfiles').doc(firebaseUser.uid).get();
-      if (doc.exists) {
-        S.user = doc.data();
-        await STORE.load();
-        EVENTS.archiveExpired();
+    if (!_routerReady) {
+      // First auth state — determine initial user and start router
+      if (firebaseUser) {
+        const doc = await db.collection('userProfiles').doc(firebaseUser.uid).get();
+        if (doc.exists) {
+          S.user = doc.data();
+          await STORE.load();
+          EVENTS.archiveExpired();
+        }
       }
+      _routerReady = true;
+      ROUTER.init();
     }
-    ROUTER.init();
+    // Subsequent auth changes (login/register/logout) are handled
+    // explicitly by AUTH_login, AUTH_register, AUTH.logout
   });
 }
 if (document.readyState === 'loading') {
