@@ -36,6 +36,23 @@ const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>
 
 const initials = name => name.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
 
+/* ── Firebase ──────────────────────────────────────────── */
+firebase.initializeApp({
+  apiKey: "AIzaSyAWAcepKB_7IyiLT8Hs5o5x4BVF6j3L-A8",
+  authDomain: "lexschedule-15fa2.firebaseapp.com",
+  projectId: "lexschedule-15fa2",
+  storageBucket: "lexschedule-15fa2.firebasestorage.app",
+  messagingSenderId: "24035193740",
+  appId: "1:24035193740:web:c33d8b8d7c6b6e65c65ca9",
+  measurementId: "G-BJPKEGYD0K"
+});
+const db     = firebase.firestore();
+const fbAuth = firebase.auth();
+function _firmId(email) {
+  const e = email || S?.user?.email || fbAuth.currentUser?.email || '';
+  return e.split('@')[1]?.replace(/\./g, '_') || 'unknown';
+}
+
 /* ── LexSchedule Logo SVG (red calendar + gold scales superimposed) ─── */
 const logoSVG = (sz = 28) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" width="${sz}" height="${sz}">
   <!-- Center post -->
@@ -101,15 +118,21 @@ const S = {
 /* ── Storage ───────────────────────────────────────────── */
 const STORE = {
   save() {
-    localStorage.setItem('lex_users',  JSON.stringify(S.users));
-    localStorage.setItem('lex_events', JSON.stringify(S.events));
-    localStorage.setItem('lex_user',   JSON.stringify(S.user));
+    if (!S.user) return;
+    const firmId = _firmId();
+    db.collection('userProfiles').doc(S.user.id).set(S.user).catch(console.error);
+    S.events.forEach(ev => {
+      db.collection('firms').doc(firmId).collection('events').doc(ev.id).set(ev).catch(console.error);
+    });
   },
-  load() {
-    S.users  = JSON.parse(localStorage.getItem('lex_users')  || '[]');
-    S.events = JSON.parse(localStorage.getItem('lex_events') || '[]');
-    S.user   = JSON.parse(localStorage.getItem('lex_user')   || 'null');
-    if (!S.users.length) STORE.seedDemo();
+  deleteEvent(evId) {
+    if (!S.user) return;
+    db.collection('firms').doc(_firmId()).collection('events').doc(evId).delete().catch(console.error);
+  },
+  async load() {
+    if (!S.user) { S.events = []; return; }
+    const snap = await db.collection('firms').doc(_firmId()).collection('events').get();
+    S.events = snap.docs.map(d => d.data());
   },
   seedDemo() {
     const atty = { id:'u1', name:'John M. Richardson', email:'attorney@woodsweidenmiller.com',
@@ -958,22 +981,23 @@ const EVENTS = {
       errEl.textContent   = 'Please enter your password.';
       return;
     }
-    // Verify password against stored user
-    const user = S.users.find(u => u.id === S.user?.id);
-    if (!user || user.password !== password) {
+    const fbUser = fbAuth.currentUser;
+    if (!fbUser) { errEl.style.display='block'; errEl.textContent='Session expired. Please log in again.'; return; }
+    const credential = firebase.auth.EmailAuthProvider.credential(fbUser.email, password);
+    fbUser.reauthenticateWithCredential(credential).then(() => {
+      const ev = S.events.find(e=>e.id===eventId);
+      const name = ev?.matterName || 'event';
+      S.events = S.events.filter(e => e.id !== eventId);
+      STORE.deleteEvent(eventId);
+      modal.close();
+      toast(`"${name}" has been permanently deleted.`, 'success', 5000);
+      ROUTER.go('/dashboard');
+    }).catch(() => {
       errEl.style.display = 'block';
       errEl.textContent   = 'Incorrect password. Please try again.';
       document.getElementById('del-password').value = '';
       document.getElementById('del-password').focus();
-      return;
-    }
-    const ev = S.events.find(e=>e.id===eventId);
-    const name = ev?.matterName || 'event';
-    S.events = S.events.filter(e => e.id !== eventId);
-    STORE.save();
-    modal.close();
-    toast(`"${name}" has been permanently deleted.`, 'success', 5000);
-    ROUTER.go('/dashboard');
+    });
   },
 
   setManualAvailability(eventId, participantId, slotId, value) {
@@ -988,7 +1012,7 @@ const EVENTS = {
   },
   delete(eventId) {
     S.events = S.events.filter(e=>e.id!==eventId);
-    STORE.save();
+    STORE.deleteEvent(eventId);
     toast('Event deleted.', 'info');
     ROUTER.go('/dashboard');
   },
@@ -996,37 +1020,51 @@ const EVENTS = {
 
 /* ── Auth ──────────────────────────────────────────────── */
 const AUTH = {
-  login(email, pass) {
-    const u = S.users.find(x => x.email.toLowerCase()===email.toLowerCase() && x.password===pass);
-    if (!u) return false;
-    if (u.verified === false) {
-      // Re-generate and re-send code, then require verification
-      const code = String(Math.floor(100000 + Math.random() * 900000));
-      u.verifyCode = code;
-      STORE.save();
-      S.pendingVerify = { userId: u.id, email: u.email, name: u.name };
-      EMAIL._send('lex_verify', {
-        subject: 'LexSchedule: Verify Your Email Address',
-        to_name: u.name, to_email: u.email,
-        code, message: `Your LexSchedule verification code is: ${code}`,
-      }, u.name, u.email);
-      return 'unverified';
+  async login(email, pass) {
+    try {
+      const cred = await fbAuth.signInWithEmailAndPassword(email, pass);
+      if (!cred.user.emailVerified) {
+        S.pendingVerify = { email: cred.user.email, name: '' };
+        await fbAuth.signOut();
+        return 'unverified';
+      }
+      const doc = await db.collection('userProfiles').doc(cred.user.uid).get();
+      if (!doc.exists) { await fbAuth.signOut(); return false; }
+      S.user = doc.data();
+      await STORE.load();
+      return true;
+    } catch(e) {
+      console.error(e);
+      return false;
     }
-    S.user = u;
-    STORE.save();
-    return true;
   },
-  register(data) {
-    if (S.users.find(u=>u.email.toLowerCase()===data.email.toLowerCase())) return 'email-exists';
-    const code = String(Math.floor(100000 + Math.random() * 900000));
-    const u = { id: uid(), ...data, verified: false, verifyCode: code, createdAt: Date.now() };
-    S.users.push(u);
-    // Do NOT set S.user yet — user must verify first
-    STORE.save();
-    S.pendingVerify = { userId: u.id, email: u.email, name: u.name };
-    return 'ok';
+  async register(data) {
+    try {
+      const cred = await fbAuth.createUserWithEmailAndPassword(data.email, data.password);
+      const profile = {
+        id: cred.user.uid,
+        name: data.name, email: data.email, phone: data.phone || '',
+        role: data.role, roleType: data.roleType,
+        assistantFor: data.assistantFor || '',
+        barNumber: data.barNumber || '', firm: data.firm || '',
+        createdAt: Date.now()
+      };
+      await db.collection('userProfiles').doc(cred.user.uid).set(profile);
+      await cred.user.sendEmailVerification();
+      S.pendingVerify = { email: data.email, name: data.name };
+      await fbAuth.signOut();
+      return 'ok';
+    } catch(e) {
+      if (e.code === 'auth/email-already-in-use') return 'email-exists';
+      console.error(e);
+      return 'error';
+    }
   },
-  logout() { S.user=null; S.pendingVerify=null; STORE.save(); ROUTER.go('/'); }
+  async logout() {
+    S.user = null; S.pendingVerify = null; S.events = [];
+    await fbAuth.signOut();
+    ROUTER.go('/');
+  }
 };
 
 /* ── Header ────────────────────────────────────────────── */
@@ -2329,9 +2367,6 @@ const VIEWS = {
     S.view = 'verify';
     const pv = S.pendingVerify;
     if (!pv) { ROUTER.go('/login'); return; }
-    // Find the pending user's code to show in simulation fallback
-    const pendingUser = S.users.find(u => u.id === pv.userId);
-    const simCode = pendingUser?.verifyCode || '';
     render(`
     <div style="min-height:100vh;display:grid;grid-template-columns:1fr 1fr;">
       <!-- Left panel -->
@@ -2346,7 +2381,7 @@ const VIEWS = {
           <div style="background:rgba(192,157,95,.12);border:1px solid rgba(192,157,95,.3);border-radius:12px;padding:28px;">
             <div style="font-size:2.2rem;margin-bottom:12px;">📧</div>
             <div style="font-family:'Cormorant Garamond',serif;font-size:1.3rem;color:#fff;font-weight:600;margin-bottom:8px;">Verify Your Identity</div>
-            <p style="font-size:.82rem;color:rgba(255,255,255,.65);line-height:1.6;">A 6-digit verification code has been sent to your firm email address. Please enter it to activate your account.</p>
+            <p style="font-size:.82rem;color:rgba(255,255,255,.65);line-height:1.6;">A verification link has been sent to your firm email address. Click the link to activate your account.</p>
             <p style="font-size:.78rem;color:rgba(192,157,95,.85);margin-top:12px;line-height:1.5;">Only <strong style="color:#C09D5F;">@lawfirmnaples.com</strong> email addresses are authorized to access LexSchedule.</p>
           </div>
         </div>
@@ -2355,22 +2390,12 @@ const VIEWS = {
       <div style="background:#FAFAF8;display:flex;align-items:center;justify-content:center;padding:60px;">
         <div style="width:100%;max-width:400px;">
           <h2 style="font-family:'Cormorant Garamond',serif;font-size:2.2rem;font-weight:600;color:#0B1F3A;margin-bottom:6px;">Check Your Email</h2>
-          <p style="font-size:.84rem;color:#6B7280;margin-bottom:6px;">We sent a 6-digit code to:</p>
+          <p style="font-size:.84rem;color:#6B7280;margin-bottom:6px;">We sent a verification link to:</p>
           <p style="font-size:.9rem;font-weight:600;color:#0B1F3A;margin-bottom:24px;">${esc(pv.email)}</p>
           <div id="verify-error" style="display:none;background:#FBE9EC;border:1px solid #FCA5A5;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:.82rem;color:#7F1D1D;border-left:3px solid #8B1C2E;"></div>
-          <div style="margin-bottom:20px;">
-            <label style="display:block;font-size:.72rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#0B1F3A;margin-bottom:10px;">Verification Code <span style="color:#8B1C2E;">*</span></label>
-            <input id="v-code" type="text" inputmode="numeric" maxlength="6" placeholder="000000"
-              style="width:100%;padding:14px 18px;border:1.5px solid #D5CCBA;border-radius:8px;font-size:1.6rem;font-family:'Montserrat',sans-serif;letter-spacing:.3em;text-align:center;outline:none;transition:border .2s;"
-              onfocus="this.style.borderColor='#0B1F3A';this.style.boxShadow='0 0 0 3px rgba(11,31,58,.08)'"
-              onblur="this.style.borderColor='#D5CCBA';this.style.boxShadow=''"
-              onkeydown="if(event.key==='Enter')AUTH_verify()">
-          </div>
-          ${simCode ? `<div style="background:#F5EDD8;border:1px solid #C09D5F;border-radius:7px;padding:10px 14px;margin-bottom:20px;font-size:.76rem;color:#7A5C20;">
-            <strong>Email simulation active —</strong> Your code is: <strong style="font-size:.9rem;letter-spacing:.1em;">${simCode}</strong>
-          </div>` : ''}
-          <button onclick="AUTH_verify()" style="width:100%;padding:12px;border:none;border-radius:8px;font-size:.82rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;background:#0B1F3A;color:#fff;font-family:'Montserrat',sans-serif;box-shadow:0 2px 8px rgba(11,31,58,.2);transition:all .2s;margin-bottom:16px;" onmouseover="this.style.background='#162d52'" onmouseout="this.style.background='#0B1F3A'">Verify &amp; Activate Account</button>
-          <div style="text-align:center;font-size:.82rem;color:#6B7280;">Didn't receive a code? <a onclick="AUTH_resendCode()" style="color:#9e7e3f;font-weight:600;cursor:pointer;">Resend</a></div>
+          <p style="font-size:.82rem;color:#6B7280;margin-bottom:24px;line-height:1.6;">Open your email and click the verification link. Once verified, click the button below to continue.</p>
+          <button onclick="AUTH_verify()" style="width:100%;padding:12px;border:none;border-radius:8px;font-size:.82rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;background:#0B1F3A;color:#fff;font-family:'Montserrat',sans-serif;box-shadow:0 2px 8px rgba(11,31,58,.2);transition:all .2s;margin-bottom:16px;" onmouseover="this.style.background='#162d52'" onmouseout="this.style.background='#0B1F3A'">I've Verified My Email</button>
+          <div style="text-align:center;font-size:.82rem;color:#6B7280;">Didn't receive the email? <a onclick="AUTH_resendCode()" style="color:#9e7e3f;font-weight:600;cursor:pointer;">Resend</a></div>
           <div style="text-align:center;margin-top:14px;"><a onclick="AUTH.logout()" style="font-size:.76rem;color:#9CA3AF;cursor:pointer;">← Sign in with a different account</a></div>
         </div>
       </div>
@@ -2381,11 +2406,14 @@ const VIEWS = {
 
 /* ── Global event handlers (called from inline onclick) ── */
 
-window.AUTH_login = function() {
+window.AUTH_login = async function() {
   const email = document.getElementById('l-email')?.value.trim();
   const pass  = document.getElementById('l-pass')?.value;
   if (!email || !pass) { document.getElementById('login-error').style.display='flex'; document.getElementById('login-error').textContent='Please enter your email and password.'; return; }
-  const result = AUTH.login(email, pass);
+  const btn = document.querySelector('button[onclick="AUTH_login()"]');
+  if (btn) { btn.disabled=true; btn.innerHTML='<span class="spinner"></span>'; }
+  const result = await AUTH.login(email, pass);
+  if (btn) { btn.disabled=false; btn.textContent='Sign In to LexSchedule'; }
   if (result === true) { toast(`Welcome back, ${S.user.name.split(' ')[0]}.`, 'success'); ROUTER.go('/dashboard'); }
   else if (result === 'unverified') { toast('Please verify your email address to continue.', 'warning'); ROUTER.go('/verify'); }
   else {
@@ -2413,7 +2441,7 @@ window.REG_selectRole = function(roleType) {
   document.getElementById('asst-title-row').style.display= roleType === 'Assistant' ? 'block' : 'none';
 };
 
-window.AUTH_register = function() {
+window.AUTH_register = async function() {
   const name         = document.getElementById('r-name')?.value.trim();
   const email        = document.getElementById('r-email')?.value.trim();
   const phone        = document.getElementById('r-phone')?.value.trim();
@@ -2454,55 +2482,44 @@ window.AUTH_register = function() {
   });
   if (result === 'email-exists') return showErr('An account with this email address already exists.');
 
-  // Send verification email (simulated if EmailJS not configured)
-  const pendingUser = S.users.find(u => u.id === S.pendingVerify?.userId);
-  const code = pendingUser?.verifyCode || '';
-  EMAIL._send('lex_verify', {
-    subject: 'LexSchedule: Verify Your Email Address',
-    to_name: name, to_email: email,
-    code, message: `Your LexSchedule verification code is: ${code}`,
-  }, name, email);
-
-  toast(`Almost there, ${name.split(' ')[0]}! Please check your email for a verification code.`, 'info', 6000);
+  toast(`Almost there, ${name.split(' ')[0]}! Please check your email for a verification link.`, 'info', 6000);
   ROUTER.go('/verify');
 };
 
-window.AUTH_verify = function() {
-  const pv = S.pendingVerify;
-  if (!pv) { ROUTER.go('/login'); return; }
-  const entered = document.getElementById('v-code')?.value.trim();
-  const errEl   = document.getElementById('verify-error');
-  const showErr = msg => { errEl.style.display='flex'; errEl.textContent=msg; };
-  if (!entered || entered.length !== 6) return showErr('Please enter the 6-digit code from your email.');
-  const u = S.users.find(x => x.id === pv.userId);
-  if (!u) return showErr('Account not found. Please register again.');
-  if (u.verifyCode !== entered) return showErr('Incorrect code. Please check your email and try again.');
-  // Mark verified, clean up, log in
-  u.verified = true;
-  delete u.verifyCode;
-  S.pendingVerify = null;
-  S.user = u;
-  STORE.save();
-  toast(`Welcome to LexSchedule, ${u.name.split(' ')[0]}!`, 'success');
-  ROUTER.go('/dashboard');
+window.AUTH_verify = async function() {
+  const fbUser = fbAuth.currentUser;
+  const errEl  = document.getElementById('verify-error');
+  const showErr = msg => { if (errEl) { errEl.style.display='flex'; errEl.textContent=msg; } };
+  if (!fbUser) {
+    // User signed out while waiting — try signing back in to re-check
+    if (!S.pendingVerify?.email) { ROUTER.go('/login'); return; }
+    showErr('Please open the verification link in this browser, then click the button again.');
+    return;
+  }
+  await fbUser.reload();
+  if (fbUser.emailVerified) {
+    const doc = await db.collection('userProfiles').doc(fbUser.uid).get();
+    if (doc.exists) {
+      S.user = doc.data();
+      S.pendingVerify = null;
+      await STORE.load();
+      toast(`Welcome to LexSchedule, ${S.user.name.split(' ')[0]}!`, 'success');
+      ROUTER.go('/dashboard');
+    }
+  } else {
+    showErr('Email not verified yet. Please click the link in your email, then try again.');
+  }
 };
 
-window.AUTH_resendCode = function() {
-  const pv = S.pendingVerify;
-  if (!pv) { ROUTER.go('/login'); return; }
-  const u = S.users.find(x => x.id === pv.userId);
-  if (!u) { ROUTER.go('/login'); return; }
-  const code = String(Math.floor(100000 + Math.random() * 900000));
-  u.verifyCode = code;
-  STORE.save();
-  EMAIL._send('lex_verify', {
-    subject: 'LexSchedule: Verify Your Email Address',
-    to_name: u.name, to_email: u.email,
-    code, message: `Your LexSchedule verification code is: ${code}`,
-  }, u.name, u.email);
-  toast('A new verification code has been sent to your email.', 'email', 5000);
-  // Re-render to update the displayed sim code
-  VIEWS.verify();
+window.AUTH_resendCode = async function() {
+  const fbUser = fbAuth.currentUser;
+  if (fbUser) {
+    await fbUser.sendEmailVerification();
+    toast('A new verification email has been sent.', 'success', 5000);
+  } else {
+    toast('Please sign in again to resend verification.', 'warning', 5000);
+    ROUTER.go('/login');
+  }
 };
 
 // Shared filter state
@@ -3462,9 +3479,17 @@ window.toast  = toast;
 
 /* ── Init ─────────────────────────────────────────────── */
 function _appInit() {
-  STORE.load();
-  EVENTS.archiveExpired();   // move past events to history on every load
-  ROUTER.init();
+  fbAuth.onAuthStateChanged(async (firebaseUser) => {
+    if (firebaseUser && firebaseUser.emailVerified) {
+      const doc = await db.collection('userProfiles').doc(firebaseUser.uid).get();
+      if (doc.exists) {
+        S.user = doc.data();
+        await STORE.load();
+        EVENTS.archiveExpired();
+      }
+    }
+    ROUTER.init();
+  });
 }
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', _appInit);
