@@ -2463,7 +2463,10 @@ window.AUTH_register = async function() {
     ? (asstTitle || 'Legal Assistant')
     : (attyTitle || 'Attorney');
 
-  const result = AUTH.register({
+  const btn = document.querySelector('button[onclick="AUTH_register()"]');
+  if (btn) { btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Creating Account...'; }
+
+  const result = await AUTH.register({
     name,
     email,
     phone,
@@ -2474,7 +2477,10 @@ window.AUTH_register = async function() {
     firm: firm || '',
     password: pass,
   });
+
+  if (btn) { btn.disabled=false; btn.textContent='Create Account'; }
   if (result === 'email-exists') return showErr('An account with this email address already exists.');
+  if (result === 'error') return showErr('Registration failed. Please try again.');
 
   toast(`Welcome to LexSchedule, ${name.split(' ')[0]}!`, 'success');
   ROUTER.go('/dashboard');
