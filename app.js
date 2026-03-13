@@ -294,7 +294,7 @@ const ROUTER = {
     if (route === 'dashboard') return VIEWS.dashboard();
     if (route === 'new') {
       S.createStep = 0;
-      S.createData = { mode:'', slots:[], participants:[], type:'', matterName:'', caseNumber:'', description:'', location:'in-person', locationDetails:'', phoneNumber:'', pollRange:{ startDate:'', endDate:'' }, pollWeekdaysOnly:true, deadline:'', notes:'' };
+      S.createData = { mode:'', slots:[], participants:[], type:'', matterName:'', caseNumber:'', description:'', location:'in-person', locationDetails:'', phoneNumber:'', schedulerPhone:'', pollRange:{ startDate:'', endDate:'' }, pollWeekdaysOnly:true, deadline:'', notes:'' };
       return VIEWS.createEvent();
     }
     if (route === 'event' && parts[0]) return VIEWS.eventDetail(parts[0]);
@@ -397,7 +397,7 @@ const ICS = {
   outlookUrl(ev, slot) {
     const et       = EVENT_TYPES[ev.type] || {};
     const subject  = encodeURIComponent(`${et.label||ev.type}: ${ev.matterName}`);
-    const body     = encodeURIComponent(`Case No.: ${ev.caseNumber||'N/A'}\r\nScheduled via LexSchedule | Woods Weidenmiller Michetti Rudnick`);
+    const body     = encodeURIComponent(`Case No.: ${ev.caseNumber||'N/A'}\r\nScheduled via LexSchedule`);
     const loc      = encodeURIComponent(ev.locationDetails||'');
     const [y,m,d]  = slot.date.split('-');
     const startISO = `${y}-${m}-${d}T${slot.startTime}:00`;
@@ -521,6 +521,7 @@ const EMAIL = {
         proposed_slots: slotsText,
         respond_url:   respondUrl,
         sender_name:   S.user?.name || 'LexSchedule',
+        sender_phone:  ev.schedulerPhone || '',
       }, p.name, p.email);
       EMAIL.log(eventId, p.email, subj, 'invitation');
       toast(`Invitation sent to ${p.name} (${p.email})`, 'email', 5000);
@@ -542,6 +543,7 @@ const EMAIL = {
       matter_name: ev.matterName,
       respond_url: respondUrl,
       sender_name: S.user?.name || 'LexSchedule',
+      sender_phone: ev.schedulerPhone || '',
     }, p.name, p.email);
     EMAIL.log(eventId, p.email, subj, 'reminder');
     EMAIL.addHistory(eventId, `Reminder sent to ${p.name}`);
@@ -575,6 +577,7 @@ const EMAIL = {
         confirmed_time:  slot ? `${fmtTime(slot.startTime)} \u2013 ${fmtTime(ev.confirmedEndTime || slot.endTime)} Eastern` : '',
         location:        ev.location==='phone'&&ev.phoneNumber ? `📞 ${ev.phoneNumber}${ev.locationDetails?' — '+ev.locationDetails:''}` : ev.locationDetails || 'To be provided',
         sender_name:     S.user?.name || 'LexSchedule',
+        sender_phone:    ev.schedulerPhone || '',
         google_cal_url:  googleUrl,
         outlook_cal_url: outlookUrl,
       }, p.name, p.email);
@@ -596,6 +599,7 @@ const EMAIL = {
         subject:     subj,
         matter_name: ev.matterName,
         sender_name: S.user?.name || 'LexSchedule',
+        sender_phone: ev.schedulerPhone || '',
       }, p.name, p.email);
       EMAIL.log(eventId, p.email, subj, 'no-match');
       toast(`No-match notice sent to ${p.name}`, 'warning', 4000);
@@ -884,6 +888,7 @@ const POLL = {
               <div style="font-size:.6rem;color:#9CA3AF;text-transform:uppercase;letter-spacing:.04em;">${par.status==='pending'?'Not responded':par.status}</div>
             </div>
             <button onclick="POLL_editResponse('${ev.id}','${par.id}')" style="font-size:.62rem;font-weight:700;color:#C09D5F;background:none;border:1px solid #C09D5F;border-radius:4px;padding:3px 8px;cursor:pointer;font-family:'Montserrat',sans-serif;white-space:nowrap;">Edit</button>
+            <button onclick="EVENTS_editParticipantEmailModal('${ev.id}','${par.id}')" title="Edit email address" style="font-size:.62rem;font-weight:700;color:#6B7280;background:none;border:1px solid #D1D5DB;border-radius:4px;padding:3px 8px;cursor:pointer;font-family:'Montserrat',sans-serif;white-space:nowrap;">@</button>
           </div>`).join('')}
       </div>` : '';
 
@@ -1308,8 +1313,15 @@ const VIEWS = {
             ${S.user?.assistantFor ? `<div style="font-size:.74rem;color:#C09D5F;font-weight:600;margin-top:3px;">Assistant to ${esc(S.user.assistantFor)}</div>` : ''}
           </div>
         </div>
-        ${S.user?.barNumber ? `<p style="font-size:.82rem;color:#4B5563;"><strong>Florida Bar No.:</strong> ${esc(S.user.barNumber)}</p>` : ''}
-        ${S.user?.assistantFor ? `<div style="background:#F6F1E9;border-left:3px solid #C09D5F;border-radius:6px;padding:10px 14px;font-size:.8rem;color:#4B5563;"><strong style="color:#0B1F3A;">Scheduling on behalf of:</strong> ${esc(S.user.assistantFor)}</div>` : ''}
+        ${S.user?.barNumber ? `<p style="font-size:.82rem;color:#4B5563;margin-bottom:10px;"><strong>Florida Bar No.:</strong> ${esc(S.user.barNumber)}</p>` : ''}
+        ${S.user?.assistantFor ? `<div style="background:#F6F1E9;border-left:3px solid #C09D5F;border-radius:6px;padding:10px 14px;font-size:.8rem;color:#4B5563;margin-bottom:10px;"><strong style="color:#0B1F3A;">Scheduling on behalf of:</strong> ${esc(S.user.assistantFor)}</div>` : ''}
+        <div style="display:flex;align-items:center;gap:10px;margin-top:4px;">
+          <div style="flex:1;">
+            <div style="font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#9CA3AF;margin-bottom:4px;">Contact Phone (shown in emails)</div>
+            <input id="acct-phone" type="tel" value="${esc(S.user?.phone||'')}" placeholder="e.g. (239) 555-0100" style="width:100%;padding:8px 12px;border:1.5px solid #D5CCBA;border-radius:7px;font-size:.84rem;font-family:'Montserrat',sans-serif;outline:none;box-sizing:border-box;" onfocus="this.style.borderColor='#0B1F3A'" onblur="this.style.borderColor='#D5CCBA'">
+          </div>
+          <button onclick="VIEWS_saveAccountPhone()" style="margin-top:18px;padding:8px 16px;border:none;border-radius:7px;background:#0B1F3A;color:#C09D5F;font-size:.76rem;font-weight:700;cursor:pointer;font-family:'Montserrat',sans-serif;white-space:nowrap;">Save</button>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-outline" onclick="closeModal()">Close</button>
@@ -1700,9 +1712,13 @@ const VIEWS = {
           <input id="c-deadline" type="date" value="${cd.deadline}" style="width:100%;padding:10px 14px;border:1.5px solid #D5CCBA;border-radius:8px;font-size:.875rem;font-family:'Montserrat',sans-serif;outline:none;" onfocus="this.style.borderColor='#0B1F3A'" onblur="this.style.borderColor='#D5CCBA'">
         </div>
       </div>
-      <div style="margin-bottom:20px;">
+      <div style="margin-bottom:18px;">
         <label style="display:block;font-size:.72rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#0B1F3A;margin-bottom:6px;">Special Instructions / Notes</label>
         <textarea id="c-notes" placeholder="Any special instructions for participants…" style="width:100%;padding:10px 14px;border:1.5px solid #D5CCBA;border-radius:8px;font-size:.875rem;font-family:'Montserrat',sans-serif;outline:none;resize:vertical;min-height:80px;" onfocus="this.style.borderColor='#0B1F3A'" onblur="this.style.borderColor='#D5CCBA'">${esc(cd.notes)}</textarea>
+      </div>
+      <div style="margin-bottom:20px;">
+        <label style="display:block;font-size:.72rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#0B1F3A;margin-bottom:6px;">Your Contact Phone <span style="font-weight:400;text-transform:none;letter-spacing:0;color:#9CA3AF;">(shown to participants in emails)</span></label>
+        <input id="c-scheduler-phone" type="tel" placeholder="e.g. (239) 555-0100" value="${esc(cd.schedulerPhone || S.user?.phone || '')}" style="width:100%;padding:10px 14px;border:1.5px solid #D5CCBA;border-radius:8px;font-size:.875rem;font-family:'Montserrat',sans-serif;outline:none;" onfocus="this.style.borderColor='#0B1F3A'" onblur="this.style.borderColor='#D5CCBA'">
       </div>
     </div>
     <div style="padding:18px 28px;border-top:1px solid #EDE6D9;background:#F6F1E9;border-radius:0 0 14px 14px;display:flex;justify-content:flex-end;">
@@ -2061,6 +2077,7 @@ const VIEWS = {
                     <span style="display:inline-block;padding:1px 7px;border-radius:10px;font-size:.6rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;background:${sbg};color:${scolor};">${p.status.replace('-',' ')}</span>
                   </div>
                   ${p.status === 'pending' ? `<button onclick="EMAIL.sendReminder('${ev.id}','${p.id}');VIEWS.eventDetail('${ev.id}')" title="Send reminder" style="width:26px;height:26px;border:1px solid #EDE6D9;border-radius:6px;background:#fff;font-size:.75rem;cursor:pointer;color:#4B5563;" onmouseover="this.style.background='#F6F1E9'" onmouseout="this.style.background='#fff'">📧</button>` : ''}
+                  <button onclick="EVENTS_editParticipantEmailModal('${ev.id}','${p.id}')" title="Edit email address" style="width:26px;height:26px;border:1px solid #EDE6D9;border-radius:6px;background:#fff;font-size:.75rem;cursor:pointer;color:#4B5563;" onmouseover="this.style.background='#F6F1E9'" onmouseout="this.style.background='#fff'">@</button>
                   <button onclick="VIEWS.manualEntryModal('${ev.id}','${p.id}')" title="Manual entry" style="width:26px;height:26px;border:1px solid #EDE6D9;border-radius:6px;background:#fff;font-size:.75rem;cursor:pointer;color:#4B5563;" onmouseover="this.style.background='#F6F1E9'" onmouseout="this.style.background='#fff'">✏️</button>
                 </div>`;
               }).join('')}
@@ -2097,26 +2114,41 @@ const VIEWS = {
     const ev = S.events.find(e=>e.id===eventId);
     if (!ev) return;
     const best = AVAIL.bestSlots(ev);
+    const totalResponded = ev.participants.filter(p=>p.status!=='pending').length;
+    const perfect = best.filter(s => s.score.available === totalResponded && totalResponded > 0);
+    const others  = best.filter(s => s.score.available < totalResponded || totalResponded === 0);
+
+    const slotCard = (s, isPerfect) => {
+      const sc = s.score;
+      const border = isPerfect ? '#2D7A4F' : '#EDE6D9';
+      const bg     = isPerfect ? '#F0FDF4' : '#fff';
+      return `<div onclick="closeModal();EVENTS.confirm('${eventId}','${s.id}')" style="border:2px solid ${border};border-radius:10px;padding:14px 18px;margin-bottom:10px;cursor:pointer;background:${bg};transition:all .2s;" onmouseover="this.style.borderColor='#C09D5F';this.style.background='#F5EDD8'" onmouseout="this.style.borderColor='${border}';this.style.background='${bg}'">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <div style="font-family:'Cormorant Garamond',serif;font-size:1.1rem;font-weight:600;color:#0B1F3A;">${fmtDate(s.date)}</div>
+            <div style="font-size:.8rem;color:#6B7280;">${fmtTime(s.startTime)} – ${fmtTime(s.endTime)}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:.9rem;font-weight:700;color:${sc.available>0?'#276749':'#9CA3AF'};">${sc.available}/${totalResponded} available</div>
+            ${isPerfect?'<div style="font-size:.68rem;font-weight:700;color:#2D7A4F;text-transform:uppercase;letter-spacing:.06em;">All Available</div>':''}
+          </div>
+        </div>
+      </div>`;
+    };
+
+    const perfectSection = perfect.length ? `
+      ${perfect.length > 1 ? `<p style="font-size:.74rem;font-weight:700;color:#2D7A4F;text-transform:uppercase;letter-spacing:.06em;margin:0 0 10px;">${perfect.length} times work for everyone</p>` : ''}
+      ${perfect.map(s => slotCard(s, true)).join('')}` : '';
+
+    const othersSection = others.length ? `
+      ${perfect.length ? `<p style="font-size:.74rem;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:.06em;margin:${perfect.length?'14px':'0'} 0 10px;">Partial availability</p>` : ''}
+      ${others.map(s => slotCard(s, false)).join('')}` : '';
+
     modal.open(`
       <div class="modal-header"><h3 class="modal-title">Confirm a Time Slot</h3><button class="modal-close" onclick="closeModal()">✕</button></div>
       <div class="modal-body">
         <p style="font-size:.84rem;color:#4B5563;margin-bottom:18px;">Select the time slot you wish to confirm. A confirmation email will be sent to all participants.</p>
-        ${best.map(s => {
-          const sc = s.score;
-          const isTop = s.id === best[0]?.id && sc.available > 0;
-          return `<div onclick="closeModal();EVENTS.confirm('${eventId}','${s.id}')" style="border:2px solid ${isTop?'#C09D5F':'#EDE6D9'};border-radius:10px;padding:14px 18px;margin-bottom:10px;cursor:pointer;background:${isTop?'#F5EDD8':'#fff'};transition:all .2s;" onmouseover="this.style.borderColor='#C09D5F';this.style.background='#F5EDD8'" onmouseout="this.style.borderColor='${isTop?'#C09D5F':'#EDE6D9'}';this.style.background='${isTop?'#F5EDD8':'#fff'}'">
-            <div style="display:flex;align-items:center;justify-content:space-between;">
-              <div>
-                <div style="font-family:'Cormorant Garamond',serif;font-size:1.1rem;font-weight:600;color:#0B1F3A;">${fmtDate(s.date)}</div>
-                <div style="font-size:.8rem;color:#6B7280;">${fmtTime(s.startTime)} – ${fmtTime(s.endTime)}</div>
-              </div>
-              <div style="text-align:right;">
-                <div style="font-size:.9rem;font-weight:700;color:${sc.available>0?'#276749':'#9CA3AF'};">${sc.available}/${ev.participants.filter(p=>p.status!=='pending').length} available</div>
-                ${isTop?'<div style="font-size:.68rem;font-weight:700;color:#9e7e3f;text-transform:uppercase;letter-spacing:.06em;">Best Match</div>':''}
-              </div>
-            </div>
-          </div>`;
-        }).join('')}
+        ${perfectSection}${othersSection}
       </div>
       <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal()">Cancel</button></div>`);
   },
@@ -2473,6 +2505,15 @@ window.REG_selectRole = function(roleType) {
   document.getElementById('asst-title-row').style.display= roleType === 'Assistant' ? 'block' : 'none';
 };
 
+window.VIEWS_saveAccountPhone = function() {
+  const phone = document.getElementById('acct-phone')?.value.trim() || '';
+  if (S.user) {
+    S.user.phone = phone;
+    db.collection('userProfiles').doc(S.user.id).set(S.user).catch(console.error);
+    toast('Contact phone saved.', 'success', 3000);
+  }
+};
+
 window.AUTH_register = async function() {
   const name         = document.getElementById('r-name')?.value.trim();
   const email        = document.getElementById('r-email')?.value.trim();
@@ -2767,7 +2808,8 @@ window.CREATE_next1 = function() {
   S.createData.phoneNumber = (loc || 'in-person') === 'phone' ? phone : '';
   S.createData.locationDetails = document.getElementById('c-locdet')?.value.trim();
   S.createData.deadline   = document.getElementById('c-deadline')?.value;
-  S.createData.notes      = document.getElementById('c-notes')?.value.trim();
+  S.createData.notes          = document.getElementById('c-notes')?.value.trim();
+  S.createData.schedulerPhone = document.getElementById('c-scheduler-phone')?.value.trim();
   S.createStep = 2;
   VIEWS.createEvent();
 };
@@ -2867,6 +2909,7 @@ window.CREATE_submit = function() {
     location: cd.location,
     locationDetails: cd.locationDetails,
     phoneNumber: cd.phoneNumber || '',
+    schedulerPhone: cd.schedulerPhone || S.user?.phone || '',
     pollRange: isPoll ? cd.pollRange : null,
     pollWeekdaysOnly: isPoll ? cd.pollWeekdaysOnly : null,
     proposedSlots,
@@ -3076,11 +3119,64 @@ window.EVENTS_addParticipantSave = function(eventId) {
     proposed_slots: slotsText,
     respond_url:    respondUrl,
     sender_name:    S.user?.name || 'LexSchedule',
+    sender_phone:   ev.schedulerPhone || '',
   }, newP.name, newP.email);
   EMAIL.log(eventId, newP.email, subj, 'invitation');
 
   modal.close();
   toast(`${name} added and invitation sent.`, 'success', 5000);
+  VIEWS.eventDetail(eventId);
+};
+
+/* ── Edit Participant Email ───────────────────────────── */
+
+window.EVENTS_editParticipantEmailModal = function(eventId, participantId) {
+  const ev = S.events.find(e => e.id === eventId);
+  if (!ev) return;
+  const p = ev.participants.find(x => x.id === participantId);
+  if (!p) return;
+  modal.open(`
+    <div class="modal-header" style="background:#0B1F3A;border-radius:18px 18px 0 0;">
+      <h3 class="modal-title" style="color:#fff">Edit Email — ${esc(p.name)}</h3>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div style="padding:24px 28px;display:flex;flex-direction:column;gap:14px;">
+      <div id="edit-email-error" style="display:none;background:#FBE9EC;border-left:3px solid #8B1C2E;border-radius:8px;padding:10px 14px;font-size:.82rem;color:#7F1D1D;"></div>
+      <div>
+        <label style="display:block;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#0B1F3A;margin-bottom:5px;">Email Address <span style="color:#8B1C2E;">*</span></label>
+        <input id="edit-email-input" type="email" value="${esc(p.email)}" style="width:100%;padding:9px 12px;border:1.5px solid #D5CCBA;border-radius:8px;font-size:.875rem;font-family:'Montserrat',sans-serif;outline:none;box-sizing:border-box;" onfocus="this.style.borderColor='#0B1F3A'" onblur="this.style.borderColor='#D5CCBA'">
+      </div>
+      <p style="font-size:.76rem;color:#9CA3AF;margin:0;">Updating the email address will not automatically resend any invitations.</p>
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:4px;">
+        <button onclick="closeModal()" style="padding:9px 20px;border:1px solid #D1D5DB;border-radius:8px;background:#fff;color:#6B7280;font-size:.82rem;font-weight:600;cursor:pointer;font-family:'Montserrat',sans-serif;">Cancel</button>
+        <button onclick="EVENTS_editParticipantEmailSave('${eventId}','${participantId}')" style="padding:9px 22px;border:none;border-radius:8px;background:#0B1F3A;color:#C09D5F;font-size:.82rem;font-weight:700;cursor:pointer;font-family:'Montserrat',sans-serif;letter-spacing:.04em;">Save</button>
+      </div>
+    </div>`);
+  document.getElementById('edit-email-input')?.focus();
+};
+
+window.EVENTS_editParticipantEmailSave = function(eventId, participantId) {
+  const ev = S.events.find(e => e.id === eventId);
+  if (!ev) return;
+  const p = ev.participants.find(x => x.id === participantId);
+  if (!p) return;
+  const newEmail = document.getElementById('edit-email-input')?.value.trim();
+  const errEl = document.getElementById('edit-email-error');
+  const showErr = msg => { errEl.textContent = msg; errEl.style.display = 'block'; };
+
+  if (!newEmail) return showErr('Please enter an email address.');
+  if (!/\S+@\S+\.\S+/.test(newEmail)) return showErr('Please enter a valid email address.');
+  if (ev.participants.some(x => x.id !== participantId && x.email.toLowerCase() === newEmail.toLowerCase()))
+    return showErr('Another participant already has this email address.');
+
+  const oldEmail = p.email;
+  if (oldEmail.toLowerCase() === newEmail.toLowerCase()) { modal.close(); return; }
+
+  p.email = newEmail;
+  EMAIL.addHistory(eventId, `Email for ${p.name} updated from ${oldEmail} to ${newEmail}`);
+  STORE.save();
+  modal.close();
+  toast(`Email updated for ${p.name}.`, 'success', 4000);
   VIEWS.eventDetail(eventId);
 };
 
