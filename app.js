@@ -301,6 +301,7 @@ const ROUTER = {
     }
     if (route === 'login')    return VIEWS.login();
     if (route === 'register') return VIEWS.register();
+    if (route === 'waitlist') return VIEWS.waitlist();
     if (route === 'verify')   return VIEWS.verify();
 
     // Auth-gated routes
@@ -1225,7 +1226,7 @@ const VIEWS = {
         </div>
         <div style="display:flex;gap:10px;">
           <button onclick="location.hash='/login'" style="padding:9px 22px;border:1.5px solid #0B1F3A;border-radius:7px;font-size:.8rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;background:transparent;color:#0B1F3A;font-family:'Montserrat',sans-serif;transition:all .2s;" onmouseover="this.style.background='#0B1F3A';this.style.color='#fff'" onmouseout="this.style.background='transparent';this.style.color='#0B1F3A'">Sign In</button>
-          <button onclick="location.hash='/register'" style="padding:9px 22px;border:none;border-radius:7px;font-size:.8rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;background:#0B1F3A;color:#fff;font-family:'Montserrat',sans-serif;">Create Account</button>
+          <button onclick="location.hash='/waitlist'" style="padding:9px 22px;border:none;border-radius:7px;font-size:.8rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;background:#C09D5F;color:#0B1F3A;font-family:'Montserrat',sans-serif;">Join the Waitlist</button>
         </div>
       </nav>
       <!-- Hero -->
@@ -1241,7 +1242,7 @@ const VIEWS = {
             <h1 style="font-family:'Cormorant Garamond',serif;font-size:3.8rem;font-weight:600;color:#fff;line-height:1.06;margin-bottom:20px;">The Scheduling Platform <em style="color:#C09D5F;font-style:italic;">Built for the Law.</em></h1>
             <p style="font-size:.98rem;color:rgba(255,255,255,.68);line-height:1.75;margin-bottom:36px;max-width:560px;">Coordinate depositions, mediations, client consultations, and opposing counsel calls with precision. Automated notifications, real-time availability tracking, and professional communications — all in one place.</p>
             <div style="display:flex;gap:14px;flex-wrap:wrap;">
-              <button onclick="location.hash='/register'" style="padding:14px 36px;border:none;border-radius:8px;font-size:.84rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;background:#C09D5F;color:#0B1F3A;font-family:'Montserrat',sans-serif;box-shadow:0 4px 16px rgba(192,157,95,.35);">Create Your Account</button>
+              <button onclick="location.hash='/waitlist'" style="padding:14px 36px;border:none;border-radius:8px;font-size:.84rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;background:#C09D5F;color:#0B1F3A;font-family:'Montserrat',sans-serif;box-shadow:0 4px 16px rgba(192,157,95,.35);">Join the Waitlist</button>
               <button onclick="location.hash='/login'" style="padding:14px 36px;border:1.5px solid rgba(255,255,255,.3);border-radius:8px;font-size:.84rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;background:transparent;color:#fff;font-family:'Montserrat',sans-serif;">Sign In</button>
             </div>
           </div>
@@ -1250,7 +1251,7 @@ const VIEWS = {
             <div style="width:44px;height:44px;border:1.5px solid #C09D5F;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 18px;">${logoSVG(24)}</div>
             <div style="font-size:.62rem;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#C09D5F;margin-bottom:10px;">Early Access</div>
             <p style="font-family:'Cormorant Garamond',serif;font-size:1.15rem;color:#fff;line-height:1.55;margin-bottom:22px;">We're currently in early testing. Join the waitlist to be the first to access.</p>
-            <button onclick="location.hash='/register'" style="width:100%;padding:11px 20px;border:none;border-radius:8px;font-size:.76rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;background:#C09D5F;color:#0B1F3A;font-family:'Montserrat',sans-serif;box-shadow:0 4px 12px rgba(192,157,95,.3);">Join the Waitlist</button>
+            <button onclick="location.hash='/waitlist'" style="width:100%;padding:11px 20px;border:none;border-radius:8px;font-size:.76rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;background:#C09D5F;color:#0B1F3A;font-family:'Montserrat',sans-serif;box-shadow:0 4px 12px rgba(192,157,95,.3);">Join the Waitlist</button>
           </div>
         </div>
       </section>
@@ -1281,7 +1282,7 @@ const VIEWS = {
       <section style="background:#F6F1E9;padding:60px 48px;text-align:center;border-top:1px solid #EDE6D9;border-bottom:1px solid #EDE6D9;">
         <h2 style="font-family:'Cormorant Garamond',serif;font-size:2.2rem;font-weight:600;color:#0B1F3A;margin-bottom:12px;">Ready to streamline your scheduling?</h2>
         <p style="font-size:.9rem;color:#6B7280;margin-bottom:28px;">Built for attorneys and legal professionals who demand precision.</p>
-        <button onclick="location.hash='/register'" style="padding:14px 40px;border:none;border-radius:8px;font-size:.84rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;background:#0B1F3A;color:#fff;font-family:'Montserrat',sans-serif;box-shadow:0 4px 12px rgba(11,31,58,.2);">Create Your Account — It's Free</button>
+        <button onclick="location.hash='/waitlist'" style="padding:14px 40px;border:none;border-radius:8px;font-size:.84rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;background:#0B1F3A;color:#fff;font-family:'Montserrat',sans-serif;box-shadow:0 4px 12px rgba(11,31,58,.2);">Join the Waitlist</button>
       </section>
       <!-- Footer -->
       <footer style="background:#0B1F3A;padding:36px 48px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;">
@@ -1291,6 +1292,56 @@ const VIEWS = {
         </div>
         <div style="font-size:.72rem;color:rgba(255,255,255,.35);">© 2026 LexSchedule. All rights reserved. Attorney advertising.</div>
       </footer>
+    </div>`);
+  },
+
+  /* ── Waitlist ── */
+  waitlist() {
+    S.view = 'waitlist';
+    render(`
+    <div style="min-height:100vh;background:#0B1F3A;display:flex;flex-direction:column;">
+      <!-- Nav -->
+      <nav style="display:flex;align-items:center;justify-content:space-between;padding:18px 48px;border-bottom:1px solid rgba(192,157,95,.15);">
+        <a onclick="location.hash='/'" style="display:flex;align-items:center;gap:12px;cursor:pointer;text-decoration:none;">
+          <div style="width:38px;height:38px;border:1.5px solid #C09D5F;border-radius:50%;display:flex;align-items:center;justify-content:center;">${logoSVG(22)}</div>
+          <div style="font-family:'Cormorant Garamond',serif;font-size:1.3rem;font-weight:700;color:#fff;letter-spacing:.02em;">LexSchedule</div>
+        </a>
+        <button onclick="location.hash='/login'" style="padding:8px 20px;border:1.5px solid rgba(255,255,255,.25);border-radius:7px;font-size:.78rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;background:transparent;color:rgba(255,255,255,.7);font-family:'Montserrat',sans-serif;">Sign In</button>
+      </nav>
+      <!-- Form -->
+      <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:60px 24px;">
+        <div style="width:100%;max-width:480px;">
+          <div id="wl-form-wrap">
+            <div style="text-align:center;margin-bottom:36px;">
+              <div style="font-size:.62rem;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:#C09D5F;margin-bottom:12px;">Early Access</div>
+              <h1 style="font-family:'Cormorant Garamond',serif;font-size:2.8rem;font-weight:600;color:#fff;line-height:1.1;margin-bottom:14px;">Join the Waitlist</h1>
+              <p style="font-size:.9rem;color:rgba(255,255,255,.6);line-height:1.7;">We're currently in early testing. Be the first to know when LexSchedule opens to new firms.</p>
+            </div>
+            <div style="background:rgba(255,255,255,.04);border:1px solid rgba(192,157,95,.2);border-radius:16px;padding:36px;">
+              <div id="wl-error" style="display:none;background:rgba(220,38,38,.15);border:1px solid rgba(220,38,38,.4);border-radius:8px;padding:11px 14px;margin-bottom:18px;font-size:.82rem;color:#FCA5A5;"></div>
+              <div style="margin-bottom:18px;">
+                <label style="display:block;font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.6);margin-bottom:7px;">Full Name <span style="color:#C09D5F;">*</span></label>
+                <input id="wl-name" type="text" placeholder="Jane A. Smith" style="width:100%;padding:11px 14px;background:rgba(255,255,255,.07);border:1.5px solid rgba(192,157,95,.25);border-radius:8px;font-size:.875rem;font-family:'Montserrat',sans-serif;color:#fff;outline:none;box-sizing:border-box;" onfocus="this.style.borderColor='#C09D5F'" onblur="this.style.borderColor='rgba(192,157,95,.25)'">
+              </div>
+              <div style="margin-bottom:18px;">
+                <label style="display:block;font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.6);margin-bottom:7px;">Email Address <span style="color:#C09D5F;">*</span></label>
+                <input id="wl-email" type="email" placeholder="jane.smith@yourfirm.com" style="width:100%;padding:11px 14px;background:rgba(255,255,255,.07);border:1.5px solid rgba(192,157,95,.25);border-radius:8px;font-size:.875rem;font-family:'Montserrat',sans-serif;color:#fff;outline:none;box-sizing:border-box;" onfocus="this.style.borderColor='#C09D5F'" onblur="this.style.borderColor='rgba(192,157,95,.25)'">
+              </div>
+              <div style="margin-bottom:28px;">
+                <label style="display:block;font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.6);margin-bottom:7px;">How would you use LexSchedule? <span style="color:rgba(255,255,255,.3);font-weight:400;text-transform:none;letter-spacing:0;">Optional</span></label>
+                <textarea id="wl-use" rows="3" placeholder="e.g. Scheduling depositions and mediations for our litigation practice…" style="width:100%;padding:11px 14px;background:rgba(255,255,255,.07);border:1.5px solid rgba(192,157,95,.25);border-radius:8px;font-size:.875rem;font-family:'Montserrat',sans-serif;color:#fff;outline:none;resize:vertical;box-sizing:border-box;" onfocus="this.style.borderColor='#C09D5F'" onblur="this.style.borderColor='rgba(192,157,95,.25)'"></textarea>
+              </div>
+              <button id="wl-btn" onclick="WAITLIST_submit()" style="width:100%;padding:13px;border:none;border-radius:8px;font-size:.82rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;background:#C09D5F;color:#0B1F3A;font-family:'Montserrat',sans-serif;box-shadow:0 4px 16px rgba(192,157,95,.3);transition:opacity .2s;">Request Early Access</button>
+            </div>
+          </div>
+          <div id="wl-success" style="display:none;text-align:center;padding:48px 36px;background:rgba(255,255,255,.04);border:1px solid rgba(192,157,95,.2);border-radius:16px;">
+            <div style="width:64px;height:64px;background:rgba(192,157,95,.15);border:1.5px solid #C09D5F;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 24px;font-size:1.8rem;">✓</div>
+            <h2 style="font-family:'Cormorant Garamond',serif;font-size:2.2rem;font-weight:600;color:#fff;margin-bottom:12px;">You're on the list.</h2>
+            <p style="font-size:.95rem;color:rgba(255,255,255,.65);line-height:1.7;margin-bottom:28px;">Early access coming soon. We'll be in touch at the email you provided.</p>
+            <button onclick="location.hash='/'" style="padding:11px 28px;border:1.5px solid rgba(192,157,95,.4);border-radius:8px;font-size:.78rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;background:transparent;color:#C09D5F;font-family:'Montserrat',sans-serif;">← Back to Home</button>
+          </div>
+        </div>
+      </div>
     </div>`);
   },
 
@@ -2639,6 +2690,30 @@ const VIEWS = {
 
 
 /* ── Global event handlers (called from inline onclick) ── */
+
+window.WAITLIST_submit = async function() {
+  const name  = document.getElementById('wl-name')?.value.trim();
+  const email = document.getElementById('wl-email')?.value.trim();
+  const use   = document.getElementById('wl-use')?.value.trim();
+  const errEl = document.getElementById('wl-error');
+  const btn   = document.getElementById('wl-btn');
+  errEl.style.display = 'none';
+  if (!name)  { errEl.textContent = 'Please enter your name.';          errEl.style.display='block'; return; }
+  if (!email) { errEl.textContent = 'Please enter your email address.'; errEl.style.display='block'; return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errEl.textContent = 'Please enter a valid email address.'; errEl.style.display='block'; return; }
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner" style="border-color:rgba(11,31,58,.3);border-top-color:#0B1F3A;"></span>';
+  try {
+    await DB.collection('waitlist').add({ name, email, use: use || '', createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+    document.getElementById('wl-form-wrap').style.display = 'none';
+    document.getElementById('wl-success').style.display   = 'block';
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = 'Request Early Access';
+    errEl.textContent = 'Something went wrong. Please try again.';
+    errEl.style.display = 'block';
+  }
+};
 
 window.AUTH_login = async function() {
   const email = document.getElementById('l-email')?.value.trim();
