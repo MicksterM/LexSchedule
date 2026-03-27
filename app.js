@@ -2280,8 +2280,9 @@ const VIEWS = {
           </div>
           <!-- History -->
           <div style="background:#fff;border-radius:12px;border:1px solid #EDE6D9;box-shadow:0 1px 4px rgba(11,31,58,.05);overflow:hidden;">
-            <div style="padding:16px 18px;border-bottom:1px solid #EDE6D9;">
+            <div style="padding:16px 18px;border-bottom:1px solid #EDE6D9;display:flex;align-items:center;justify-content:space-between;">
               <h4 style="font-family:'Cormorant Garamond',serif;font-size:1.1rem;font-weight:600;color:#0B1F3A;">Activity Log</h4>
+              <button onclick="EVENTS_printLog('${ev.id}')" style="padding:5px 12px;border:1px solid #D5CCBA;border-radius:6px;background:#fff;color:#4B5563;font-size:.72rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;font-family:'Montserrat',sans-serif;display:flex;align-items:center;gap:5px;" onmouseover="this.style.background='#F6F1E9'" onmouseout="this.style.background='#fff'">🖨 Print</button>
             </div>
             <div style="padding:14px 18px;max-height:240px;overflow-y:auto;">
               ${(ev.history||[]).slice().reverse().map(h=>`
@@ -3279,6 +3280,41 @@ window.RESPOND_submit = function(token, eventId, participantId) {
 };
 
 /* ── Add Participant to Active Event ─────────────────── */
+
+window.EVENTS_printLog = function(eventId) {
+  const ev = S.events.find(e => e.id === eventId);
+  if (!ev) return;
+  const rows = (ev.history || []).slice().reverse().map(h =>
+    `<tr><td style="padding:7px 12px;border-bottom:1px solid #eee;color:#6B7280;white-space:nowrap;font-size:12px;">${fmtTS(h.ts)}</td><td style="padding:7px 12px;border-bottom:1px solid #eee;font-size:12px;color:#1f2937;">${esc(h.action)}</td></tr>`
+  ).join('') || `<tr><td colspan="2" style="padding:12px;color:#9CA3AF;font-size:12px;">No activity recorded.</td></tr>`;
+  const confirmed = ev.confirmedSlot ? ev.proposedSlots.find(s => s.id === ev.confirmedSlot) : null;
+  const win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html><html><head><title>Activity Log — ${esc(ev.matterName||'Matter')}</title>
+  <style>
+    body { font-family: Georgia, serif; margin: 40px; color: #1f2937; }
+    h1   { font-size: 22px; margin-bottom: 4px; color: #0B1F3A; }
+    .sub { font-size: 13px; color: #6B7280; margin-bottom: 24px; }
+    .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 24px; margin-bottom: 28px; padding: 16px; background: #f9f7f4; border: 1px solid #e5e0d8; border-radius: 6px; }
+    .meta-row { font-size: 12px; } .meta-row strong { color: #0B1F3A; }
+    table { width: 100%; border-collapse: collapse; }
+    thead th { background: #0B1F3A; color: #fff; padding: 9px 12px; text-align: left; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
+    @media print { body { margin: 20px; } }
+  </style></head><body>
+  <h1>Activity Log</h1>
+  <div class="sub">Printed ${new Date().toLocaleString()}</div>
+  <div class="meta">
+    <div class="meta-row"><strong>Matter:</strong> ${esc(ev.matterName||'—')}</div>
+    <div class="meta-row"><strong>Case No.:</strong> ${esc(ev.caseNumber||'—')}</div>
+    <div class="meta-row"><strong>Type:</strong> ${esc(ev.type||'—')}</div>
+    <div class="meta-row"><strong>Status:</strong> ${esc(ev.status||'—')}</div>
+    ${confirmed ? `<div class="meta-row"><strong>Confirmed Date:</strong> ${fmtDate(confirmed.date)}, ${fmtTime(confirmed.startTime)} – ${fmtTime(confirmed.endTime)}</div>` : ''}
+    <div class="meta-row"><strong>Scheduler:</strong> ${esc(S.user?.name||'—')}</div>
+  </div>
+  <table><thead><tr><th style="width:160px;">Date / Time</th><th>Activity</th></tr></thead><tbody>${rows}</tbody></table>
+  <script>window.onload = function(){ window.print(); }<\/script>
+  </body></html>`);
+  win.document.close();
+};
 
 window.EVENTS_addParticipantModal = function(eventId) {
   const roleOptions = Object.entries(ROLES).map(([k,v]) =>
