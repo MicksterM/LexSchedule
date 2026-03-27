@@ -1139,21 +1139,64 @@ const AUTH = {
 
 /* ── Header ────────────────────────────────────────────── */
 const HEADER = () => `
-<header style="height:68px;background:#0B1F3A;display:flex;align-items:center;padding:0 28px;position:fixed;top:0;left:0;right:0;z-index:100;box-shadow:0 2px 16px rgba(11,31,58,.35);">
-  <div style="display:flex;align-items:center;gap:14px;cursor:pointer;flex-shrink:0;" onclick="location.hash='/dashboard'">
-    <div style="width:40px;height:40px;border:2px solid #C09D5F;border-radius:50%;display:flex;align-items:center;justify-content:center;">
+<header style="height:68px;background:#0B1F3A;display:flex;align-items:center;padding:0 28px;position:fixed;top:0;left:0;right:0;z-index:100;box-shadow:0 4px 24px rgba(11,31,58,.5);overflow:hidden;">
+
+  <!-- Diagonal hatch texture -->
+  <div style="position:absolute;inset:0;pointer-events:none;opacity:.035;background-image:repeating-linear-gradient(45deg,#C09D5F 0,#C09D5F 1px,transparent 0,transparent 50%);background-size:14px 14px;"></div>
+
+  <!-- Right-side radial gold glow -->
+  <div style="position:absolute;right:-80px;top:50%;transform:translateY(-50%);width:420px;height:420px;background:radial-gradient(circle,rgba(192,157,95,.11) 0%,rgba(192,157,95,.04) 40%,transparent 68%);border-radius:50%;pointer-events:none;"></div>
+
+  <!-- Secondary glow, further right -->
+  <div style="position:absolute;right:120px;top:50%;transform:translateY(-50%);width:180px;height:180px;background:radial-gradient(circle,rgba(192,157,95,.06) 0%,transparent 70%);border-radius:50%;pointer-events:none;"></div>
+
+  <!-- Gold bottom accent line -->
+  <div style="position:absolute;bottom:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent 0%,#9e7e3f 12%,#d4b87a 40%,#C09D5F 50%,#d4b87a 60%,#9e7e3f 88%,transparent 100%);pointer-events:none;"></div>
+
+  <!-- Centered decorative tagline -->
+  <div style="position:absolute;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:12px;pointer-events:none;white-space:nowrap;">
+    <div style="width:36px;height:1px;background:linear-gradient(90deg,transparent,rgba(192,157,95,.45));"></div>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" width="13" height="13" style="opacity:.4;flex-shrink:0;">
+      <line x1="12" y1="3" x2="12" y2="17" stroke="#C09D5F" stroke-width="1.6" stroke-linecap="round"/>
+      <line x1="4" y1="8" x2="20" y2="8" stroke="#C09D5F" stroke-width="1.6" stroke-linecap="round"/>
+      <line x1="5" y1="8" x2="5" y2="12" stroke="#C09D5F" stroke-width="1.2" stroke-linecap="round"/>
+      <line x1="19" y1="8" x2="19" y2="12" stroke="#C09D5F" stroke-width="1.2" stroke-linecap="round"/>
+      <path d="M3 12 Q5 15.5 7 12" stroke="#C09D5F" stroke-width="1.3" fill="rgba(192,157,95,.2)" stroke-linecap="round"/>
+      <path d="M17 12 Q19 15.5 21 12" stroke="#C09D5F" stroke-width="1.3" fill="rgba(192,157,95,.2)" stroke-linecap="round"/>
+      <line x1="9" y1="17" x2="15" y2="17" stroke="#C09D5F" stroke-width="1.4" stroke-linecap="round"/>
+    </svg>
+    <span style="font-size:.56rem;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:rgba(192,157,95,.38);font-family:'Montserrat',sans-serif;">Professional Legal Scheduling</span>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" width="13" height="13" style="opacity:.4;flex-shrink:0;">
+      <line x1="12" y1="3" x2="12" y2="17" stroke="#C09D5F" stroke-width="1.6" stroke-linecap="round"/>
+      <line x1="4" y1="8" x2="20" y2="8" stroke="#C09D5F" stroke-width="1.6" stroke-linecap="round"/>
+      <line x1="5" y1="8" x2="5" y2="12" stroke="#C09D5F" stroke-width="1.2" stroke-linecap="round"/>
+      <line x1="19" y1="8" x2="19" y2="12" stroke="#C09D5F" stroke-width="1.2" stroke-linecap="round"/>
+      <path d="M3 12 Q5 15.5 7 12" stroke="#C09D5F" stroke-width="1.3" fill="rgba(192,157,95,.2)" stroke-linecap="round"/>
+      <path d="M17 12 Q19 15.5 21 12" stroke="#C09D5F" stroke-width="1.3" fill="rgba(192,157,95,.2)" stroke-linecap="round"/>
+      <line x1="9" y1="17" x2="15" y2="17" stroke="#C09D5F" stroke-width="1.4" stroke-linecap="round"/>
+    </svg>
+    <div style="width:36px;height:1px;background:linear-gradient(90deg,rgba(192,157,95,.45),transparent);"></div>
+  </div>
+
+  <!-- Logo -->
+  <div style="display:flex;align-items:center;gap:14px;cursor:pointer;flex-shrink:0;position:relative;z-index:1;" onclick="location.hash='/dashboard'">
+    <div style="width:40px;height:40px;border:2px solid #C09D5F;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 0 12px rgba(192,157,95,.25);">
       ${logoSVG(22)}
     </div>
     <div style="font-family:'Cormorant Garamond',serif;font-size:1.45rem;font-weight:700;color:#fff;letter-spacing:.02em;line-height:1;">LexSchedule</div>
   </div>
-  <nav style="display:flex;gap:4px;margin-left:36px;">
+
+  <!-- Nav -->
+  <nav style="display:flex;gap:4px;margin-left:36px;position:relative;z-index:1;">
     <a onclick="location.hash='/dashboard'" style="padding:7px 14px;border-radius:7px;font-size:.76rem;font-weight:500;color:rgba(255,255,255,.7);cursor:pointer;transition:all .2s;text-decoration:none;" onmouseover="this.style.background='rgba(255,255,255,.1)';this.style.color='#fff'" onmouseout="this.style.background='';this.style.color='rgba(255,255,255,.7)'">Dashboard</a>
     <a onclick="location.hash='/new'" style="padding:7px 14px;border-radius:7px;font-size:.76rem;font-weight:500;color:rgba(255,255,255,.7);cursor:pointer;transition:all .2s;text-decoration:none;" onmouseover="this.style.background='rgba(255,255,255,.1)';this.style.color='#fff'" onmouseout="this.style.background='';this.style.color='rgba(255,255,255,.7)'">New Event</a>
   </nav>
-  <div style="margin-left:auto;display:flex;align-items:center;gap:12px;">
-    <button onclick="location.hash='/new'" style="background:#C09D5F;color:#0B1F3A;border:none;padding:8px 18px;border-radius:7px;font-size:.76rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;font-family:'Montserrat',sans-serif;">+ New Event</button>
-    <div style="display:flex;align-items:center;gap:9px;padding:5px 12px 5px 6px;border-radius:30px;background:rgba(255,255,255,.08);cursor:pointer;" onclick="VIEWS.userMenu()" id="user-menu-btn">
-      <div style="width:30px;height:30px;border-radius:50%;background:#C09D5F;color:#0B1F3A;font-family:'Cormorant Garamond',serif;font-size:.85rem;font-weight:700;display:flex;align-items:center;justify-content:center;">${initials(S.user?.name||'?')}</div>
+
+  <!-- Right controls -->
+  <div style="margin-left:auto;display:flex;align-items:center;gap:12px;position:relative;z-index:1;">
+    <button onclick="location.hash='/new'" style="background:linear-gradient(135deg,#C09D5F,#d4b87a);color:#0B1F3A;border:none;padding:8px 18px;border-radius:7px;font-size:.76rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;font-family:'Montserrat',sans-serif;box-shadow:0 2px 8px rgba(192,157,95,.3);">+ New Event</button>
+    <div style="display:flex;align-items:center;gap:9px;padding:5px 12px 5px 6px;border-radius:30px;background:rgba(255,255,255,.08);cursor:pointer;border:1px solid rgba(192,157,95,.15);" onclick="VIEWS.userMenu()" id="user-menu-btn">
+      <div style="width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#C09D5F,#d4b87a);color:#0B1F3A;font-family:'Cormorant Garamond',serif;font-size:.85rem;font-weight:700;display:flex;align-items:center;justify-content:center;">${initials(S.user?.name||'?')}</div>
       <div>
         <div style="font-size:.76rem;font-weight:600;color:#fff;line-height:1.1;">${esc(S.user?.name||'')}</div>
         <div style="font-size:.62rem;color:rgba(255,255,255,.55);">${S.user?.assistantFor ? `Asst. to ${esc(S.user.assistantFor)}` : esc(S.user?.role||'')}</div>
