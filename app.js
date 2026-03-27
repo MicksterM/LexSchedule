@@ -3300,7 +3300,7 @@ window.EVENTS_printLog = function(eventId) {
     thead th { background: #0B1F3A; color: #fff; padding: 9px 12px; text-align: left; font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
     @media print { body { margin: 20px; } }
   </style></head><body>
-  <h1>Activity Log</h1>
+  <h1>LexSchedule Activity Log</h1>
   <div class="sub">Printed ${new Date().toLocaleString()}</div>
   <div class="meta">
     <div class="meta-row"><strong>Matter:</strong> ${esc(ev.matterName||'—')}</div>
