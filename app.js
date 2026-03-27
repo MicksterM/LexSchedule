@@ -523,12 +523,14 @@ const EMAIL = {
     return `${base}?cal=${eventId}/${firmId}`;
   },
 
-  // Build the respond URL for a participant token
-  // Uses query params so email clients don't strip the # fragment
+  // Build the respond URL for a participant token.
+  // Points to respond.html — a real file GitHub Pages serves directly,
+  // with no dependency on hash routing, Firebase timing, or inline scripts.
   _respondUrl(token, eventId) {
     const base = window.location.href.split('?')[0].split('#')[0];
+    const dir  = base.endsWith('/') ? base : base.substring(0, base.lastIndexOf('/') + 1);
     const firmId = _firmId();
-    return `${base}?respond=${token}/${eventId}/${firmId}`;
+    return `${dir}respond.html?t=${token}&e=${eventId}&f=${firmId}`;
   },
 
   sendInvitations(eventId) {
