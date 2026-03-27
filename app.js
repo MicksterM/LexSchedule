@@ -1231,17 +1231,26 @@ const VIEWS = {
       <!-- Hero -->
       <section style="background:#0B1F3A;padding:96px 48px;position:relative;overflow:hidden;">
         <div style="position:absolute;inset:0;opacity:.04;background-image:url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2260%22 height=%2260%22><circle cx=%2230%22 cy=%2230%22 r=%221%22 fill=%22%23C09D5F%22/></svg>');background-size:30px 30px;"></div>
-        <div style="max-width:720px;position:relative;z-index:1;">
-          <div style="display:inline-flex;align-items:center;gap:10px;font-size:.68rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#C09D5F;margin-bottom:20px;">
-            <span style="width:24px;height:1px;background:#C09D5F;display:inline-block;opacity:.5;"></span>
-            Exclusively for Legal Professionals
-            <span style="width:24px;height:1px;background:#C09D5F;display:inline-block;opacity:.5;"></span>
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:48px;position:relative;z-index:1;max-width:1200px;">
+          <div style="flex:1;min-width:0;">
+            <div style="display:inline-flex;align-items:center;gap:10px;font-size:.68rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#C09D5F;margin-bottom:20px;">
+              <span style="width:24px;height:1px;background:#C09D5F;display:inline-block;opacity:.5;"></span>
+              Exclusively for Legal Professionals
+              <span style="width:24px;height:1px;background:#C09D5F;display:inline-block;opacity:.5;"></span>
+            </div>
+            <h1 style="font-family:'Cormorant Garamond',serif;font-size:3.8rem;font-weight:600;color:#fff;line-height:1.06;margin-bottom:20px;">The Scheduling Platform <em style="color:#C09D5F;font-style:italic;">Built for the Law.</em></h1>
+            <p style="font-size:.98rem;color:rgba(255,255,255,.68);line-height:1.75;margin-bottom:36px;max-width:560px;">Coordinate depositions, mediations, client consultations, and opposing counsel calls with precision. Automated notifications, real-time availability tracking, and professional communications — all in one place.</p>
+            <div style="display:flex;gap:14px;flex-wrap:wrap;">
+              <button onclick="location.hash='/register'" style="padding:14px 36px;border:none;border-radius:8px;font-size:.84rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;background:#C09D5F;color:#0B1F3A;font-family:'Montserrat',sans-serif;box-shadow:0 4px 16px rgba(192,157,95,.35);">Create Your Account</button>
+              <button onclick="location.hash='/login'" style="padding:14px 36px;border:1.5px solid rgba(255,255,255,.3);border-radius:8px;font-size:.84rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;background:transparent;color:#fff;font-family:'Montserrat',sans-serif;">Sign In</button>
+            </div>
           </div>
-          <h1 style="font-family:'Cormorant Garamond',serif;font-size:3.8rem;font-weight:600;color:#fff;line-height:1.06;margin-bottom:20px;">The Scheduling Platform <em style="color:#C09D5F;font-style:italic;">Built for the Law.</em></h1>
-          <p style="font-size:.98rem;color:rgba(255,255,255,.68);line-height:1.75;margin-bottom:36px;max-width:560px;">Coordinate depositions, mediations, client consultations, and opposing counsel calls with precision. Automated notifications, real-time availability tracking, and professional communications — all in one place.</p>
-          <div style="display:flex;gap:14px;flex-wrap:wrap;">
-            <button onclick="location.hash='/register'" style="padding:14px 36px;border:none;border-radius:8px;font-size:.84rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;background:#C09D5F;color:#0B1F3A;font-family:'Montserrat',sans-serif;box-shadow:0 4px 16px rgba(192,157,95,.35);">Create Your Account</button>
-            <button onclick="location.hash='/login'" style="padding:14px 36px;border:1.5px solid rgba(255,255,255,.3);border-radius:8px;font-size:.84rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;background:transparent;color:#fff;font-family:'Montserrat',sans-serif;">Sign In</button>
+          <!-- Waitlist callout -->
+          <div style="flex-shrink:0;width:300px;border:1px solid rgba(192,157,95,.35);border-radius:16px;padding:32px 28px;background:rgba(255,255,255,.04);backdrop-filter:blur(4px);text-align:center;">
+            <div style="width:44px;height:44px;border:1.5px solid #C09D5F;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 18px;">${logoSVG(24)}</div>
+            <div style="font-size:.62rem;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#C09D5F;margin-bottom:10px;">Early Access</div>
+            <p style="font-family:'Cormorant Garamond',serif;font-size:1.15rem;color:#fff;line-height:1.55;margin-bottom:22px;">We're currently in early testing. Join the waitlist to be the first to access.</p>
+            <button onclick="location.hash='/register'" style="width:100%;padding:11px 20px;border:none;border-radius:8px;font-size:.76rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;background:#C09D5F;color:#0B1F3A;font-family:'Montserrat',sans-serif;box-shadow:0 4px 12px rgba(192,157,95,.3);">Join the Waitlist</button>
           </div>
         </div>
       </section>
