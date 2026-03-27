@@ -276,12 +276,26 @@ const ROUTER = {
   },
   go(hash) { window.location.hash = hash; },
   dispatch() {
+    // Handle query-param routes used in email links (avoids # stripping by email clients)
+    const qp = new URLSearchParams(window.location.search);
+    const respondParam = qp.get('respond');
+    const calParam     = qp.get('cal');
+    if (respondParam) {
+      const [token, eventId, firmId] = respondParam.split('/');
+      if (token) return VIEWS.respond(token, eventId, firmId);
+    }
+    if (calParam) {
+      const [eventId, firmId] = calParam.split('/');
+      if (eventId) return VIEWS.calDownload(eventId, firmId);
+    }
+
     const hash = window.location.hash || '#/';
     const [base, ...parts] = hash.replace('#','').split('/').filter(Boolean);
     const route = base || '';
 
     // Public routes
     if (route === 'respond' && parts[0]) { return VIEWS.respond(parts[0], parts[1], parts[2]); }
+    if (route === 'cal'     && parts[0]) { return VIEWS.calDownload(parts[0], parts[1]); }
     if (route === '' || route === 'landing') {
       return S.user ? ROUTER.go('/dashboard') : VIEWS.landing();
     }
@@ -389,19 +403,19 @@ const ICS = {
     const et      = EVENT_TYPES[ev.type] || {};
     const title   = encodeURIComponent(`${et.label||ev.type}: ${ev.matterName}`);
     const dtStart = ICS._fmt(slot.date, slot.startTime);
-    const dtEnd   = ICS._fmt(slot.date, slot.endTime);
-    const details = encodeURIComponent(`Case No.: ${ev.caseNumber||'N/A'}\nScheduled via LexSchedule`);
+    const dtEnd   = ICS._fmt(slot.date, ev.confirmedEndTime || slot.endTime);
+    const details = encodeURIComponent(`Proceeding Type: ${et.label||ev.type}\nCase No.: ${ev.caseNumber||'N/A'}\nScheduled via LexSchedule`);
     const loc     = encodeURIComponent(ev.locationDetails||'');
     return `https://www.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dtStart}/${dtEnd}&details=${details}&location=${loc}`;
   },
   outlookUrl(ev, slot) {
     const et       = EVENT_TYPES[ev.type] || {};
     const subject  = encodeURIComponent(`${et.label||ev.type}: ${ev.matterName}`);
-    const body     = encodeURIComponent(`Case No.: ${ev.caseNumber||'N/A'}\r\nScheduled via LexSchedule`);
+    const body     = encodeURIComponent(`Proceeding Type: ${et.label||ev.type}\r\nCase No.: ${ev.caseNumber||'N/A'}\r\nScheduled via LexSchedule`);
     const loc      = encodeURIComponent(ev.locationDetails||'');
     const [y,m,d]  = slot.date.split('-');
     const startISO = `${y}-${m}-${d}T${slot.startTime}:00`;
-    const endISO   = `${y}-${m}-${d}T${slot.endTime}:00`;
+    const endISO   = `${y}-${m}-${d}T${ev.confirmedEndTime || slot.endTime}:00`;
     return `https://outlook.live.com/calendar/0/deeplink/compose?subject=${subject}&startdt=${startISO}&enddt=${endISO}&body=${body}&location=${loc}`;
   },
   download(ev, slot) {
@@ -481,11 +495,40 @@ const EMAIL = {
       });
   },
 
-  // Build the respond URL for a participant token
-  _respondUrl(token, eventId) {
-    const base = window.location.href.split('#')[0];
+  // Build HTML for proposed slots — card rows with date left, time right
+  _slotsHtml(ev) {
+    if (ev.mode === 'poll') {
+      const dates  = POLL.uniqueDates(ev.proposedSlots);
+      const start  = fmtDate(dates[0]);
+      const end    = fmtDate(dates[dates.length - 1]);
+      const blocks = [...new Set(ev.proposedSlots.map(s => s.block))];
+      const label  = blocks.length === 2 ? 'Morning &amp; Afternoon'
+        : blocks[0] === 'AM' ? 'Morning (9:00 AM – 12:00 PM)'
+        : 'Afternoon (12:00 PM – 6:00 PM)';
+      return `<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #EDE6D9;border-radius:6px;background:#ffffff;"><tr><td style="padding:10px 14px;font-size:13px;color:#374151;">Please indicate your availability between <strong>${start}</strong> and <strong>${end}</strong> (${label}).</td></tr></table>`;
+    }
+    return ev.proposedSlots.map(s =>
+      `<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:5px;border:1px solid #EDE6D9;border-radius:6px;background:#ffffff;">` +
+      `<tr><td style="padding:9px 14px;font-size:13px;font-weight:600;color:#0B1F3A;">${fmtDate(s.date)}</td>` +
+      `<td style="padding:9px 14px;font-size:12px;color:#6B7280;text-align:right;white-space:nowrap;">${fmtTime(s.startTime)} – ${fmtTime(s.endTime)}</td></tr>` +
+      `</table>`
+    ).join('');
+  },
+
+  // Build the Apple Calendar ICS download URL for a confirmed event
+  // Uses query params so email clients don't strip the # fragment
+  _appleCalUrl(eventId) {
+    const base = window.location.href.split('?')[0].split('#')[0];
     const firmId = _firmId();
-    return `${base}#/respond/${token}/${eventId}/${firmId}`;
+    return `${base}?cal=${eventId}/${firmId}`;
+  },
+
+  // Build the respond URL for a participant token
+  // Uses query params so email clients don't strip the # fragment
+  _respondUrl(token, eventId) {
+    const base = window.location.href.split('?')[0].split('#')[0];
+    const firmId = _firmId();
+    return `${base}?respond=${token}/${eventId}/${firmId}`;
   },
 
   sendInvitations(eventId) {
@@ -494,19 +537,7 @@ const EMAIL = {
     const cfg = (() => { try { return JSON.parse(localStorage.getItem('ejs_config')||'{}'); } catch(e){return{};} })();
     const et = EVENT_TYPES[ev.type] || {};
     const deadline = ev.deadline ? fmtDate(new Date(ev.deadline).toISOString().slice(0,10)) : 'As soon as possible';
-    const isPoll = ev.mode === 'poll';
-    const slotsText = isPoll
-      ? (() => {
-          const dates = POLL.uniqueDates(ev.proposedSlots);
-          const start = fmtDate(dates[0]);
-          const end   = fmtDate(dates[dates.length - 1]);
-          const blocks = [...new Set(ev.proposedSlots.map(s => s.block))];
-          const blockLabel = blocks.length === 2 ? 'Morning & Afternoon'
-            : blocks[0] === 'AM' ? 'Morning (9:00 AM – 12:00 PM)'
-            : 'Afternoon (12:00 PM – 6:00 PM)';
-          return `Please indicate your availability between ${start} and ${end} (${blockLabel}).`;
-        })()
-      : ev.proposedSlots.map(s => `  • ${fmtDate(s.date)} ${fmtTime(s.startTime)}–${fmtTime(s.endTime)}`).join('\n');
+    const slotsText = EMAIL._slotsHtml(ev);
     ev.participants.forEach(p => {
       const subj = `Scheduling Invitation: ${ev.matterName}`;
       const respondUrl = EMAIL._respondUrl(p.token, ev.id);
@@ -520,6 +551,9 @@ const EMAIL = {
         deadline:      deadline,
         proposed_slots: slotsText,
         respond_url:   respondUrl,
+        firm_name:     S.user?.firm || 'LexSchedule',
+        firm_address:  S.user?.firmAddress || '',
+        firm_fax:      S.user?.firmFax || '',
         sender_name:   S.user?.name || 'LexSchedule',
         sender_phone:  ev.schedulerPhone || '',
       }, p.name, p.email);
@@ -534,6 +568,7 @@ const EMAIL = {
     const p  = ev?.participants.find(x=>x.id===participantId);
     if (!ev || !p) return;
     const cfg = (() => { try { return JSON.parse(localStorage.getItem('ejs_config')||'{}'); } catch(e){return{};} })();
+    const et   = EVENT_TYPES[ev.type] || {};
     const subj = `Reminder: Please Respond — ${ev.matterName}`;
     const respondUrl = EMAIL._respondUrl(p.token, ev.id);
     EMAIL._send(cfg.templateReminder || cfg.templateInvitation, {
@@ -541,8 +576,12 @@ const EMAIL = {
       to_name:     p.name,
       subject:     subj,
       matter_name: ev.matterName,
+      event_type:  et.label || ev.type,
       respond_url: respondUrl,
-      sender_name: S.user?.name || 'LexSchedule',
+      firm_name:    S.user?.firm || 'LexSchedule',
+      firm_address: S.user?.firmAddress || '',
+      firm_fax:     S.user?.firmFax || '',
+      sender_name:  S.user?.name || 'LexSchedule',
       sender_phone: ev.schedulerPhone || '',
     }, p.name, p.email);
     EMAIL.log(eventId, p.email, subj, 'reminder');
@@ -565,21 +604,28 @@ const EMAIL = {
     const cfg  = (() => { try { return JSON.parse(localStorage.getItem('ejs_config')||'{}'); } catch(e){return{};} })();
     const slot = ev.proposedSlots.find(s=>s.id===ev.confirmedSlot);
     const subj = `Confirmed: ${ev.matterName} \u2014 ${fmtDateShort(slot?.date||'')}`;
+    const et         = EVENT_TYPES[ev.type] || {};
     const googleUrl  = slot ? ICS.googleCalUrl(ev, slot) : '';
     const outlookUrl = slot ? ICS.outlookUrl(ev, slot) : '';
+    const appleCalUrl = slot ? EMAIL._appleCalUrl(ev.id) : '';
     ev.participants.forEach(p => {
       EMAIL._send(cfg.templateConfirmation || cfg.templateInvitation, {
         to_email:        p.email,
         to_name:         p.name,
         subject:         subj,
         matter_name:     ev.matterName,
+        event_type:      et.label || ev.type,
         confirmed_date:  slot ? fmtDate(slot.date) : 'To Be Confirmed',
         confirmed_time:  slot ? `${fmtTime(slot.startTime)} \u2013 ${fmtTime(ev.confirmedEndTime || slot.endTime)} Eastern` : '',
         location:        ev.location==='phone'&&ev.phoneNumber ? `📞 ${ev.phoneNumber}${ev.locationDetails?' — '+ev.locationDetails:''}` : ev.locationDetails || 'To be provided',
+        firm_name:       S.user?.firm || 'LexSchedule',
+        firm_address:    S.user?.firmAddress || '',
+        firm_fax:        S.user?.firmFax || '',
         sender_name:     S.user?.name || 'LexSchedule',
         sender_phone:    ev.schedulerPhone || '',
         google_cal_url:  googleUrl,
         outlook_cal_url: outlookUrl,
+        apple_cal_url:   appleCalUrl,
       }, p.name, p.email);
       EMAIL.log(eventId, p.email, subj, 'confirmation');
       toast(`Confirmation sent to ${p.name}`, 'email', 4000);
@@ -591,6 +637,7 @@ const EMAIL = {
     const ev = S.events.find(e=>e.id===eventId);
     if (!ev) return;
     const cfg = (() => { try { return JSON.parse(localStorage.getItem('ejs_config')||'{}'); } catch(e){return{};} })();
+    const et   = EVENT_TYPES[ev.type] || {};
     const subj = `No Mutual Availability Found \u2014 New Scheduling Process Initiated: ${ev.matterName}`;
     ev.participants.forEach(p => {
       EMAIL._send(cfg.templateNoMatch || cfg.templateInvitation, {
@@ -598,7 +645,11 @@ const EMAIL = {
         to_name:     p.name,
         subject:     subj,
         matter_name: ev.matterName,
-        sender_name: S.user?.name || 'LexSchedule',
+        event_type:  et.label || ev.type,
+        firm_name:    S.user?.firm || 'LexSchedule',
+        firm_address: S.user?.firmAddress || '',
+        firm_fax:     S.user?.firmFax || '',
+        sender_name:  S.user?.name || 'LexSchedule',
         sender_phone: ev.schedulerPhone || '',
       }, p.name, p.email);
       EMAIL.log(eventId, p.email, subj, 'no-match');
@@ -647,19 +698,31 @@ const EMAIL = {
         <div class="email-preview-cta"><a class="email-preview-btn" href="#">${isPoll ? 'Mark My Availability' : 'Indicate My Availability'}</a></div>
         <p>If you have any questions, please contact our office.</p>`;
       })(),
-      confirmation: `<p>Dear Participant,</p>
+      confirmation: (() => {
+        const googleUrl  = slot ? ICS.googleCalUrl(ev, slot) : '';
+        const outlookUrl = slot ? ICS.outlookUrl(ev, slot) : '';
+        const appleUrl   = slot ? EMAIL._appleCalUrl(ev.id) : '';
+        return `<p>Dear Participant,</p>
         <p>We are pleased to confirm that the following proceeding has been scheduled. Please mark your calendar accordingly.</p>
         <div class="email-preview-details">
           <div class="email-preview-detail-row"><span class="email-preview-detail-label">Matter:</span><span class="email-preview-detail-value">${esc(ev.matterName)}</span></div>
+          <div class="email-preview-detail-row"><span class="email-preview-detail-label">Proceeding Type:</span><span class="email-preview-detail-value">${et.label||''}</span></div>
           <div class="email-preview-detail-row"><span class="email-preview-detail-label">Confirmed Date:</span><span class="email-preview-detail-value">${slot ? fmtDate(slot.date) : 'To Be Confirmed'}</span></div>
-          <div class="email-preview-detail-row"><span class="email-preview-detail-label">Time:</span><span class="email-preview-detail-value">${slot ? `${fmtTime(slot.startTime)} – ${fmtTime(slot.endTime)}` : ''} (Eastern)</span></div>
+          <div class="email-preview-detail-row"><span class="email-preview-detail-label">Time:</span><span class="email-preview-detail-value">${slot ? `${fmtTime(slot.startTime)} – ${fmtTime(ev.confirmedEndTime || slot.endTime)}` : ''} (Eastern)</span></div>
           <div class="email-preview-detail-row"><span class="email-preview-detail-label">Location:</span><span class="email-preview-detail-value">${esc(ev.location==='phone'&&ev.phoneNumber?`📞 ${ev.phoneNumber}${ev.locationDetails?' — '+ev.locationDetails:''}`:ev.locationDetails||'To be provided')}</span></div>
         </div>
-        <p>Please do not hesitate to contact our office if you have any questions or require any accommodations.</p>`,
+        <p>Please do not hesitate to contact our office if you have any questions or require any accommodations.</p>
+        ${slot ? `<div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap;">
+          <a href="${googleUrl}" target="_blank" style="display:inline-block;padding:7px 14px;background:#4285F4;color:#fff;border-radius:6px;font-size:.74rem;font-weight:600;text-decoration:none;">+ Google Calendar</a>
+          <a href="${outlookUrl}" target="_blank" style="display:inline-block;padding:7px 14px;background:#0078D4;color:#fff;border-radius:6px;font-size:.74rem;font-weight:600;text-decoration:none;">+ Outlook</a>
+          <a href="${appleUrl}" style="display:inline-block;padding:7px 14px;background:#555;color:#fff;border-radius:6px;font-size:.74rem;font-weight:600;text-decoration:none;">+ Apple Calendar</a>
+        </div>` : ''}`;
+      })(),
       'no-match': `<p>Dear Participant,</p>
         <p>After reviewing all submitted availability responses, we were unable to identify a mutually agreeable date and time for the following matter.</p>
         <div class="email-preview-details">
           <div class="email-preview-detail-row"><span class="email-preview-detail-label">Matter:</span><span class="email-preview-detail-value">${esc(ev.matterName)}</span></div>
+          <div class="email-preview-detail-row"><span class="email-preview-detail-label">Proceeding Type:</span><span class="email-preview-detail-value">${et.label||''}</span></div>
         </div>
         <p>A new scheduling request will be initiated shortly with additional proposed dates. You will receive a new invitation to indicate your availability. We apologize for any inconvenience and appreciate your continued cooperation.</p>`,
     };
@@ -671,13 +734,16 @@ const EMAIL = {
       <div style="padding:24px;">
         <div class="email-preview">
           <div class="email-preview-header">
-            <div class="email-preview-firm">LexSchedule</div>
+            <div class="email-preview-firm">${esc(S.user?.firm || 'LexSchedule')}</div>
             <div class="email-preview-tagline">Professional Legal Scheduling</div>
           </div>
           <div class="email-preview-gold-bar" style="height:3px;background:linear-gradient(90deg,#9e7e3f,#d4b87a,#9e7e3f);"></div>
           <div class="email-preview-body">${bodies[type] || bodies['invitation']}</div>
           <div class="email-preview-footer">
-            <p>LexSchedule · Professional Legal Scheduling</p>
+            <p>${esc(S.user?.firm || 'LexSchedule')}</p>
+            ${S.user?.firmAddress ? `<p style="margin-top:4px;font-size:.72rem;">${esc(S.user.firmAddress)}</p>` : ''}
+            ${S.user?.phone ? `<p style="margin-top:4px;font-size:.72rem;">Tel: ${esc(S.user.phone)}</p>` : ''}
+            ${S.user?.firmFax ? `<p style="margin-top:4px;font-size:.72rem;">Fax: ${esc(S.user.firmFax)}</p>` : ''}
             <p style="margin-top:8px;font-size:.65rem;">This communication is intended solely for the designated recipient and may contain privileged or confidential information.</p>
           </div>
         </div>
@@ -1048,6 +1114,7 @@ const AUTH = {
         role: data.role, roleType: data.roleType,
         assistantFor: data.assistantFor || '',
         barNumber: data.barNumber || '', firm: data.firm || '',
+        firmAddress: '', firmFax: '',
         createdAt: Date.now()
       };
       await db.collection('userProfiles').doc(cred.user.uid).set(profile);
@@ -1315,12 +1382,24 @@ const VIEWS = {
         </div>
         ${S.user?.barNumber ? `<p style="font-size:.82rem;color:#4B5563;margin-bottom:10px;"><strong>Florida Bar No.:</strong> ${esc(S.user.barNumber)}</p>` : ''}
         ${S.user?.assistantFor ? `<div style="background:#F6F1E9;border-left:3px solid #C09D5F;border-radius:6px;padding:10px 14px;font-size:.8rem;color:#4B5563;margin-bottom:10px;"><strong style="color:#0B1F3A;">Scheduling on behalf of:</strong> ${esc(S.user.assistantFor)}</div>` : ''}
-        <div style="display:flex;align-items:center;gap:10px;margin-top:4px;">
-          <div style="flex:1;">
+        <div style="margin-top:4px;display:flex;flex-direction:column;gap:10px;">
+          <div>
+            <div style="font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#9CA3AF;margin-bottom:4px;">Firm Name (shown in emails)</div>
+            <input id="acct-firm" type="text" value="${esc(S.user?.firm||'')}" placeholder="e.g. Smith & Jones, P.A." style="width:100%;padding:8px 12px;border:1.5px solid #D5CCBA;border-radius:7px;font-size:.84rem;font-family:'Montserrat',sans-serif;outline:none;box-sizing:border-box;" onfocus="this.style.borderColor='#0B1F3A'" onblur="this.style.borderColor='#D5CCBA'">
+          </div>
+          <div>
             <div style="font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#9CA3AF;margin-bottom:4px;">Contact Phone (shown in emails)</div>
             <input id="acct-phone" type="tel" value="${esc(S.user?.phone||'')}" placeholder="e.g. (239) 555-0100" style="width:100%;padding:8px 12px;border:1.5px solid #D5CCBA;border-radius:7px;font-size:.84rem;font-family:'Montserrat',sans-serif;outline:none;box-sizing:border-box;" onfocus="this.style.borderColor='#0B1F3A'" onblur="this.style.borderColor='#D5CCBA'">
           </div>
-          <button onclick="VIEWS_saveAccountPhone()" style="margin-top:18px;padding:8px 16px;border:none;border-radius:7px;background:#0B1F3A;color:#C09D5F;font-size:.76rem;font-weight:700;cursor:pointer;font-family:'Montserrat',sans-serif;white-space:nowrap;">Save</button>
+          <div>
+            <div style="font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#9CA3AF;margin-bottom:4px;">Fax Number (shown in emails)</div>
+            <input id="acct-fax" type="tel" value="${esc(S.user?.firmFax||'')}" placeholder="e.g. (239) 555-0199" style="width:100%;padding:8px 12px;border:1.5px solid #D5CCBA;border-radius:7px;font-size:.84rem;font-family:'Montserrat',sans-serif;outline:none;box-sizing:border-box;" onfocus="this.style.borderColor='#0B1F3A'" onblur="this.style.borderColor='#D5CCBA'">
+          </div>
+          <div>
+            <div style="font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#9CA3AF;margin-bottom:4px;">Firm Address (shown in emails)</div>
+            <input id="acct-address" type="text" value="${esc(S.user?.firmAddress||'')}" placeholder="e.g. 1234 Main St, Suite 100, Naples, FL 34102" style="width:100%;padding:8px 12px;border:1.5px solid #D5CCBA;border-radius:7px;font-size:.84rem;font-family:'Montserrat',sans-serif;outline:none;box-sizing:border-box;" onfocus="this.style.borderColor='#0B1F3A'" onblur="this.style.borderColor='#D5CCBA'">
+          </div>
+          <button onclick="VIEWS_saveAccountContact()" style="align-self:flex-start;padding:8px 16px;border:none;border-radius:7px;background:#0B1F3A;color:#C09D5F;font-size:.76rem;font-weight:700;cursor:pointer;font-family:'Montserrat',sans-serif;white-space:nowrap;">Save Contact Info</button>
         </div>
       </div>
       <div class="modal-footer">
@@ -2259,6 +2338,42 @@ const VIEWS = {
   },
 
 
+  /* ── Apple Calendar ICS Download (public) ── */
+  calDownload(eventId, firmId) {
+    const tryDownload = ev => {
+      if (!ev.confirmedSlot) {
+        render(`<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F6F1E9;">
+          <div style="text-align:center;padding:40px;"><h2 style="font-family:'Cormorant Garamond',serif;font-size:1.8rem;color:#0B1F3A;margin-bottom:12px;">No Confirmed Date</h2>
+          <p style="font-size:.9rem;color:#6B7280;">This event has not yet been confirmed. Please check back after a date is selected.</p></div>
+        </div>`);
+        return;
+      }
+      const slot = ev.proposedSlots.find(s => s.id === ev.confirmedSlot);
+      if (slot) ICS.download(ev, slot);
+    };
+    // Try in-memory first
+    const local = S.events.find(e => e.id === eventId);
+    if (local) { tryDownload(local); return; }
+    // Load from Firestore
+    const fId = firmId || _firmId();
+    render(`<div class="loading-screen"><div class="spinner"></div><p class="loading-text">Preparing calendar file…</p></div>`);
+    db.collection('firms').doc(fId).collection('events').doc(eventId).get().then(doc => {
+      if (!doc.exists) {
+        render(`<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F6F1E9;">
+          <div style="text-align:center;padding:40px;"><h2 style="font-family:'Cormorant Garamond',serif;font-size:1.8rem;color:#0B1F3A;margin-bottom:12px;">Event Not Found</h2>
+          <p style="font-size:.9rem;color:#6B7280;">This calendar link is invalid or has expired.</p></div>
+        </div>`);
+        return;
+      }
+      tryDownload(doc.data());
+    }).catch(() => {
+      render(`<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F6F1E9;">
+        <div style="text-align:center;padding:40px;"><h2 style="font-family:'Cormorant Garamond',serif;font-size:1.8rem;color:#0B1F3A;margin-bottom:12px;">Unable to Load</h2>
+        <p style="font-size:.9rem;color:#6B7280;">Please check your internet connection and try again.</p></div>
+      </div>`);
+    });
+  },
+
   /* ── Respond Page (public) ── */
   respond(token, eventId, firmId) {
     S.view = 'respond';
@@ -2505,12 +2620,19 @@ window.REG_selectRole = function(roleType) {
   document.getElementById('asst-title-row').style.display= roleType === 'Assistant' ? 'block' : 'none';
 };
 
-window.VIEWS_saveAccountPhone = function() {
-  const phone = document.getElementById('acct-phone')?.value.trim() || '';
+window.VIEWS_saveAccountPhone = function() { window.VIEWS_saveAccountContact(); };
+window.VIEWS_saveAccountContact = function() {
+  const firm    = document.getElementById('acct-firm')?.value.trim() || '';
+  const phone   = document.getElementById('acct-phone')?.value.trim() || '';
+  const fax     = document.getElementById('acct-fax')?.value.trim() || '';
+  const address = document.getElementById('acct-address')?.value.trim() || '';
   if (S.user) {
+    S.user.firm = firm;
     S.user.phone = phone;
+    S.user.firmFax = fax;
+    S.user.firmAddress = address;
     db.collection('userProfiles').doc(S.user.id).set(S.user).catch(console.error);
-    toast('Contact phone saved.', 'success', 3000);
+    toast('Contact info saved.', 'success', 3000);
   }
 };
 
@@ -3094,18 +3216,7 @@ window.EVENTS_addParticipantSave = function(eventId) {
   const cfg = (() => { try { return JSON.parse(localStorage.getItem('ejs_config')||'{}'); } catch(e){return{};} })();
   const et  = EVENT_TYPES[ev.type] || {};
   const deadline   = ev.deadline ? fmtDate(new Date(ev.deadline).toISOString().slice(0,10)) : 'As soon as possible';
-  const slotsText = ev.mode === 'poll'
-    ? (() => {
-        const dates = POLL.uniqueDates(ev.proposedSlots);
-        const start = fmtDate(dates[0]);
-        const end   = fmtDate(dates[dates.length - 1]);
-        const blocks = [...new Set(ev.proposedSlots.map(s => s.block))];
-        const blockLabel = blocks.length === 2 ? 'Morning & Afternoon'
-          : blocks[0] === 'AM' ? 'Morning (9:00 AM – 12:00 PM)'
-          : 'Afternoon (12:00 PM – 6:00 PM)';
-        return `Please indicate your availability between ${start} and ${end} (${blockLabel}).`;
-      })()
-    : ev.proposedSlots.map(s => `  • ${fmtDate(s.date)} ${fmtTime(s.startTime)}–${fmtTime(s.endTime)}`).join('\n');
+  const slotsText = EMAIL._slotsHtml(ev);
   const respondUrl = EMAIL._respondUrl(newP.token, ev.id);
   const subj = `Scheduling Invitation: ${ev.matterName}`;
   EMAIL._send(cfg.templateInvitation, {
