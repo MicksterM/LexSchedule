@@ -1379,9 +1379,6 @@ const VIEWS = {
             <label style="display:block;font-size:.72rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#0B1F3A;margin-bottom:6px;">Password <span style="color:#8B1C2E;">*</span></label>
             <input id="l-pass" type="password" placeholder="Enter your password" value="Demo1234!" style="width:100%;padding:10px 14px;border:1.5px solid #D5CCBA;border-radius:8px;font-size:.875rem;font-family:'Montserrat',sans-serif;outline:none;transition:border .2s;" onfocus="this.style.borderColor='#0B1F3A'" onblur="this.style.borderColor='#D5CCBA'" onkeydown="if(event.key==='Enter')AUTH_login()">
           </div>
-          <div style="background:#F5EDD8;border:1px solid #C09D5F;border-radius:7px;padding:10px 14px;margin-bottom:20px;font-size:.76rem;color:#7A5C20;">
-            <strong>Demo credentials:</strong> attorney@woodsweidenmiller.com / Demo1234!
-          </div>
           <button onclick="AUTH_login()" style="width:100%;padding:12px;border:none;border-radius:8px;font-size:.82rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;background:#0B1F3A;color:#fff;font-family:'Montserrat',sans-serif;box-shadow:0 2px 8px rgba(11,31,58,.2);transition:all .2s;" onmouseover="this.style.background='#162d52'" onmouseout="this.style.background='#0B1F3A'">Sign In to LexSchedule</button>
           <div style="text-align:center;font-size:.82rem;color:#6B7280;margin-top:20px;">Don't have an account? <a onclick="location.hash='/register'" style="color:#9e7e3f;font-weight:600;cursor:pointer;">Create one here</a></div>
           <div style="text-align:center;margin-top:16px;"><a onclick="location.hash='/'" style="font-size:.76rem;color:#9CA3AF;cursor:pointer;">← Back to Home</a></div>
