@@ -446,6 +446,7 @@ const EMAILJS_CONFIG = (() => {
     get templateReminder()    { return saved.templateReminder    || ''; },
     get templateConfirmation(){ return saved.templateConfirmation|| ''; },
     get templateNoMatch()     { return saved.templateNoMatch     || ''; },
+    get templateWaitlist()    { return saved.templateWaitlist    || ''; },
     isConfigured() {
       return !!(this.publicKey && this.serviceId && this.templateInvitation);
     }
@@ -453,7 +454,7 @@ const EMAILJS_CONFIG = (() => {
 })();
 
 window.EJS_saveConfig = function() {
-  const fields = ['publicKey','serviceId','templateInvitation','templateReminder','templateConfirmation','templateNoMatch'];
+  const fields = ['publicKey','serviceId','templateInvitation','templateReminder','templateConfirmation','templateNoMatch','templateWaitlist'];
   const cfg = {};
   fields.forEach(f => { cfg[f] = (document.getElementById('ejs_'+f)||{}).value?.trim()||''; });
   localStorage.setItem('ejs_config', JSON.stringify(cfg));
@@ -1541,6 +1542,7 @@ const VIEWS = {
         ${field('templateReminder',     'Template ID — Reminder',     'e.g. template_XXXXXXX (or leave blank to reuse Invitation)', v('templateReminder'))}
         ${field('templateConfirmation', 'Template ID — Confirmation', 'e.g. template_XXXXXXX (or leave blank to reuse Invitation)', v('templateConfirmation'))}
         ${field('templateNoMatch',      'Template ID — No Match',     'e.g. template_XXXXXXX (or leave blank to reuse Invitation)', v('templateNoMatch'))}
+        ${field('templateWaitlist',     'Template ID — Waitlist Notification', 'e.g. template_XXXXXXX', v('templateWaitlist'))}
         <div style="background:#FEF3C7;border-radius:8px;padding:12px 14px;font-size:.77rem;color:#92400E;margin-top:4px;">
           <strong>Template variables available:</strong> to_name, to_email, subject, matter_name, case_number,
           event_type, deadline, proposed_slots, respond_url, confirmed_date, confirmed_time, location, sender_name
@@ -2702,6 +2704,15 @@ window.WAITLIST_submit = async function() {
   btn.innerHTML = '<span class="spinner" style="border-color:rgba(11,31,58,.3);border-top-color:#0B1F3A;"></span>';
   try {
     await db.collection('waitlist').add({ name, email, use: use || '', createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+    // Notify admin
+    EMAIL._send(EMAILJS_CONFIG.templateWaitlist, {
+      to_name:  'Mick',
+      to_email: 'mickm@me.com',
+      wl_name:  name,
+      wl_email: email,
+      wl_use:   use || '(not provided)',
+      subject:  'New Waitlist Signup — ' + name
+    }, 'Mick', 'mickm@me.com');
     document.getElementById('wl-form-wrap').style.display = 'none';
     document.getElementById('wl-success').style.display   = 'block';
   } catch(e) {
