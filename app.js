@@ -2704,7 +2704,7 @@ window.WAITLIST_submit = async function() {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner" style="border-color:rgba(11,31,58,.3);border-top-color:#0B1F3A;"></span>';
   try {
-    await DB.collection('waitlist').add({ name, email, use: use || '', createdAt: firebase.firestore.FieldValue.serverTimestamp() });
+    await db.collection('waitlist').add({ name, email, use: use || '', createdAt: firebase.firestore.FieldValue.serverTimestamp() });
     document.getElementById('wl-form-wrap').style.display = 'none';
     document.getElementById('wl-success').style.display   = 'block';
   } catch(e) {
