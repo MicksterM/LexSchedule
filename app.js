@@ -1292,34 +1292,9 @@ const VIEWS = {
     <div style="min-height:100vh;display:grid;grid-template-columns:1fr 1fr;">
       <!-- Left panel -->
       <div style="background:#0B1F3A;padding:64px;display:flex;flex-direction:column;justify-content:center;position:relative;overflow:hidden;">
-        <!-- Fine dot texture -->
-        <div style="position:absolute;inset:0;opacity:.04;background-image:url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2260%22 height=%2260%22><circle cx=%2230%22 cy=%2230%22 r=%221%22 fill=%22%23C09D5F%22/></svg>');background-size:30px 30px;pointer-events:none;"></div>
-        <!-- Diagonal hatch overlay -->
-        <div style="position:absolute;inset:0;pointer-events:none;opacity:.025;background-image:repeating-linear-gradient(45deg,#C09D5F 0,#C09D5F 1px,transparent 0,transparent 50%);background-size:18px 18px;"></div>
-        <!-- Top-right radial gold glow -->
-        <div style="position:absolute;top:-60px;right:-60px;width:420px;height:420px;background:radial-gradient(circle,rgba(192,157,95,.13) 0%,rgba(192,157,95,.04) 45%,transparent 68%);border-radius:50%;pointer-events:none;"></div>
-        <!-- Bottom-right secondary glow -->
-        <div style="position:absolute;bottom:-40px;right:40px;width:260px;height:260px;background:radial-gradient(circle,rgba(192,157,95,.07) 0%,transparent 65%);border-radius:50%;pointer-events:none;"></div>
-        <!-- Large watermark scales — right centre -->
-        <div style="position:absolute;right:-28px;top:50%;transform:translateY(-50%);opacity:.06;pointer-events:none;">${logoSVG(300)}</div>
-        <!-- Vertical gold accent line, right third -->
-        <div style="position:absolute;top:48px;bottom:48px;right:38%;width:1px;background:linear-gradient(180deg,transparent,rgba(192,157,95,.3) 20%,rgba(192,157,95,.3) 80%,transparent);pointer-events:none;"></div>
-        <!-- Bottom ornamental rule -->
-        <div style="position:absolute;bottom:36px;left:64px;right:64px;display:flex;align-items:center;gap:10px;opacity:.28;pointer-events:none;">
-          <div style="flex:1;height:1px;background:linear-gradient(90deg,transparent,#C09D5F);"></div>
-          <div style="width:5px;height:5px;background:#C09D5F;transform:rotate(45deg);flex-shrink:0;"></div>
-          <div style="font-size:.5rem;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:#C09D5F;font-family:'Montserrat',sans-serif;">Est. MMXXIV</div>
-          <div style="width:5px;height:5px;background:#C09D5F;transform:rotate(45deg);flex-shrink:0;"></div>
-          <div style="flex:1;height:1px;background:linear-gradient(90deg,#C09D5F,transparent);"></div>
-        </div>
-        <!-- Top ornamental rule -->
-        <div style="position:absolute;top:36px;left:64px;right:64px;display:flex;align-items:center;gap:10px;opacity:.2;pointer-events:none;">
-          <div style="flex:1;height:1px;background:linear-gradient(90deg,transparent,#C09D5F);"></div>
-          <div style="width:5px;height:5px;background:#C09D5F;transform:rotate(45deg);flex-shrink:0;"></div>
-          <div style="flex:1;height:1px;background:linear-gradient(90deg,#C09D5F,transparent);"></div>
-        </div>
+        <div style="position:absolute;inset:0;opacity:.04;background-image:url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2260%22 height=%2260%22><circle cx=%2230%22 cy=%2230%22 r=%221%22 fill=%22%23C09D5F%22/></svg>');background-size:30px 30px;"></div>
         <div style="position:relative;z-index:1;">
-          <div style="width:68px;height:68px;border:2px solid #C09D5F;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:28px;box-shadow:0 0 24px rgba(192,157,95,.2);">
+          <div style="width:68px;height:68px;border:2px solid #C09D5F;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:28px;">
             ${logoSVG(40)}
           </div>
           <div style="font-family:'Cormorant Garamond',serif;font-size:2.6rem;font-weight:700;color:#fff;line-height:1.1;margin-bottom:6px;letter-spacing:.01em;">LexSchedule</div>
@@ -1361,36 +1336,11 @@ const VIEWS = {
     render(`
     <div style="min-height:100vh;display:grid;grid-template-columns:1fr 1fr;">
       <div style="background:#0B1F3A;padding:64px;display:flex;flex-direction:column;justify-content:center;position:relative;overflow:hidden;">
-        <!-- Fine dot texture -->
-        <div style="position:absolute;inset:0;opacity:.04;background-image:url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2260%22 height=%2260%22><circle cx=%2230%22 cy=%2230%22 r=%221%22 fill=%22%23C09D5F%22/></svg>');background-size:30px 30px;pointer-events:none;"></div>
-        <!-- Diagonal hatch overlay -->
-        <div style="position:absolute;inset:0;pointer-events:none;opacity:.025;background-image:repeating-linear-gradient(45deg,#C09D5F 0,#C09D5F 1px,transparent 0,transparent 50%);background-size:18px 18px;"></div>
-        <!-- Top-right radial gold glow -->
-        <div style="position:absolute;top:-60px;right:-60px;width:420px;height:420px;background:radial-gradient(circle,rgba(192,157,95,.13) 0%,rgba(192,157,95,.04) 45%,transparent 68%);border-radius:50%;pointer-events:none;"></div>
-        <!-- Bottom-right secondary glow -->
-        <div style="position:absolute;bottom:-40px;right:40px;width:260px;height:260px;background:radial-gradient(circle,rgba(192,157,95,.07) 0%,transparent 65%);border-radius:50%;pointer-events:none;"></div>
-        <!-- Large watermark scales — right centre -->
-        <div style="position:absolute;right:-28px;top:50%;transform:translateY(-50%);opacity:.06;pointer-events:none;">${logoSVG(300)}</div>
-        <!-- Vertical gold accent line, right third -->
-        <div style="position:absolute;top:48px;bottom:48px;right:38%;width:1px;background:linear-gradient(180deg,transparent,rgba(192,157,95,.3) 20%,rgba(192,157,95,.3) 80%,transparent);pointer-events:none;"></div>
-        <!-- Bottom ornamental rule -->
-        <div style="position:absolute;bottom:36px;left:64px;right:64px;display:flex;align-items:center;gap:10px;opacity:.28;pointer-events:none;">
-          <div style="flex:1;height:1px;background:linear-gradient(90deg,transparent,#C09D5F);"></div>
-          <div style="width:5px;height:5px;background:#C09D5F;transform:rotate(45deg);flex-shrink:0;"></div>
-          <div style="font-size:.5rem;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:#C09D5F;font-family:'Montserrat',sans-serif;">Est. MMXXIV</div>
-          <div style="width:5px;height:5px;background:#C09D5F;transform:rotate(45deg);flex-shrink:0;"></div>
-          <div style="flex:1;height:1px;background:linear-gradient(90deg,#C09D5F,transparent);"></div>
-        </div>
-        <!-- Top ornamental rule -->
-        <div style="position:absolute;top:36px;left:64px;right:64px;display:flex;align-items:center;gap:10px;opacity:.2;pointer-events:none;">
-          <div style="flex:1;height:1px;background:linear-gradient(90deg,transparent,#C09D5F);"></div>
-          <div style="width:5px;height:5px;background:#C09D5F;transform:rotate(45deg);flex-shrink:0;"></div>
-          <div style="flex:1;height:1px;background:linear-gradient(90deg,#C09D5F,transparent);"></div>
-        </div>
+        <div style="position:absolute;inset:0;opacity:.04;background-image:url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2260%22 height=%2260%22><circle cx=%2230%22 cy=%2230%22 r=%221%22 fill=%22%23C09D5F%22/></svg>');background-size:30px 30px;"></div>
         <div style="position:relative;z-index:1;">
-          <div style="width:68px;height:68px;border:2px solid #C09D5F;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:28px;box-shadow:0 0 24px rgba(192,157,95,.2);">${logoSVG(40)}</div>
-          <div style="font-family:'Cormorant Garamond',serif;font-size:2.6rem;font-weight:700;color:#fff;line-height:1.1;margin-bottom:6px;letter-spacing:.01em;">LexSchedule</div>
-          <div style="font-size:.65rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#C09D5F;margin-bottom:32px;">Professional Legal Scheduling Platform</div>
+          <div style="width:68px;height:68px;border:2px solid #C09D5F;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:28px;">${logoSVG(40)}</div>
+          <div style="font-family:'Cormorant Garamond',serif;font-size:2.4rem;font-weight:700;color:#fff;line-height:1.1;margin-bottom:8px;letter-spacing:.01em;">LexSchedule</div>
+          <div style="font-size:.65rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#C09D5F;margin-bottom:32px;">Professional Legal Scheduling</div>
           <div style="display:flex;flex-direction:column;gap:16px;margin-top:20px;">
             ${[['✅','Free for firm personnel'],['⏱️','Set up in under 2 minutes'],['🔒','Secure and confidential'],['📧','Professional communications included']].map(([i,t])=>`<div style="display:flex;gap:12px;align-items:center;font-size:.84rem;color:rgba(255,255,255,.75);"><span>${i}</span>${t}</div>`).join('')}
           </div>
