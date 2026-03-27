@@ -446,7 +446,7 @@ const EMAILJS_CONFIG = (() => {
     get templateReminder()    { return saved.templateReminder    || ''; },
     get templateConfirmation(){ return saved.templateConfirmation|| ''; },
     get templateNoMatch()     { return saved.templateNoMatch     || ''; },
-    get templateWaitlist()    { return saved.templateWaitlist    || ''; },
+    get templateWaitlist()    { return saved.templateWaitlist    || 'template_6wlskjg'; },
     isConfigured() {
       return !!(this.publicKey && this.serviceId && this.templateInvitation);
     }
