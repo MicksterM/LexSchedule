@@ -48,9 +48,8 @@ firebase.initializeApp({
 });
 const db     = firebase.firestore();
 const fbAuth = firebase.auth();
-function _firmId(email) {
-  const e = email || S?.user?.email || fbAuth.currentUser?.email || '';
-  return e.split('@')[1]?.replace(/\./g, '_') || 'unknown';
+function _firmId() {
+  return S?.user?.id || fbAuth.currentUser?.uid || 'unknown';
 }
 
 /* ── LexSchedule Logo SVG (red calendar + gold scales superimposed) ─── */
