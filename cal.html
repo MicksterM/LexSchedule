@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LexSchedule — Calendar Download</title>
+  <style>
+    body { margin: 0; background: #0B1F3A; display: flex; align-items: center;
+           justify-content: center; min-height: 100vh; font-family: Georgia, serif; }
+    p { color: rgba(255,255,255,0.6); font-size: 1rem; letter-spacing: 0.08em; }
+  </style>
+  <script>
+    var p = new URLSearchParams(window.location.search);
+    var e = p.get('e'), f = p.get('f');
+    if (e && f) {
+      window.location.replace('index.html#/cal/' + e + '/' + f);
+    } else {
+      window.location.replace('index.html');
+    }
+  </script>
+</head>
+<body><p>Preparing calendar file…</p></body>
+</html>

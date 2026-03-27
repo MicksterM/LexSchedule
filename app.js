@@ -515,12 +515,13 @@ const EMAIL = {
     ).join('');
   },
 
-  // Build the Apple Calendar ICS download URL for a confirmed event
-  // Uses query params so email clients don't strip the # fragment
+  // Build the Apple Calendar ICS download URL for a confirmed event.
+  // Points to cal.html — a real file served directly by GitHub Pages.
   _appleCalUrl(eventId) {
     const base = window.location.href.split('?')[0].split('#')[0];
+    const dir  = base.endsWith('/') ? base : base.substring(0, base.lastIndexOf('/') + 1);
     const firmId = _firmId();
-    return `${base}?cal=${eventId}/${firmId}`;
+    return `${dir}cal.html?e=${eventId}&f=${firmId}`;
   },
 
   // Build the respond URL for a participant token.
