@@ -612,28 +612,37 @@ const EMAIL = {
     const googleUrl  = slot ? ICS.googleCalUrl(ev, slot) : '';
     const outlookUrl = slot ? ICS.outlookUrl(ev, slot) : '';
     const appleCalUrl = slot ? EMAIL._appleCalUrl(ev.id) : '';
+    const confirmParams = (toEmail, toName) => ({
+      to_email:        toEmail,
+      to_name:         toName,
+      subject:         subj,
+      matter_name:     ev.matterName,
+      event_type:      et.label || ev.type,
+      confirmed_date:  slot ? fmtDate(slot.date) : 'To Be Confirmed',
+      confirmed_time:  slot ? `${fmtTime(slot.startTime)} \u2013 ${fmtTime(ev.confirmedEndTime || slot.endTime)} Eastern` : '',
+      location:        ev.location==='phone'&&ev.phoneNumber ? `📞 ${ev.phoneNumber}${ev.locationDetails?' — '+ev.locationDetails:''}` : ev.locationDetails || 'To be provided',
+      firm_name:       S.user?.firm || 'LexSchedule',
+      firm_address:    S.user?.firmAddress || '',
+      firm_fax:        S.user?.firmFax || '',
+      sender_name:     S.user?.name || 'LexSchedule',
+      sender_phone:    ev.schedulerPhone || '',
+      google_cal_url:  googleUrl,
+      outlook_cal_url: outlookUrl,
+      apple_cal_url:   appleCalUrl,
+    });
+    const templateId = cfg.templateConfirmation || cfg.templateInvitation;
     ev.participants.forEach(p => {
-      EMAIL._send(cfg.templateConfirmation || cfg.templateInvitation, {
-        to_email:        p.email,
-        to_name:         p.name,
-        subject:         subj,
-        matter_name:     ev.matterName,
-        event_type:      et.label || ev.type,
-        confirmed_date:  slot ? fmtDate(slot.date) : 'To Be Confirmed',
-        confirmed_time:  slot ? `${fmtTime(slot.startTime)} \u2013 ${fmtTime(ev.confirmedEndTime || slot.endTime)} Eastern` : '',
-        location:        ev.location==='phone'&&ev.phoneNumber ? `📞 ${ev.phoneNumber}${ev.locationDetails?' — '+ev.locationDetails:''}` : ev.locationDetails || 'To be provided',
-        firm_name:       S.user?.firm || 'LexSchedule',
-        firm_address:    S.user?.firmAddress || '',
-        firm_fax:        S.user?.firmFax || '',
-        sender_name:     S.user?.name || 'LexSchedule',
-        sender_phone:    ev.schedulerPhone || '',
-        google_cal_url:  googleUrl,
-        outlook_cal_url: outlookUrl,
-        apple_cal_url:   appleCalUrl,
-      }, p.name, p.email);
+      console.log('[LexSchedule] Sending confirmation to participant:', p.email);
+      EMAIL._send(templateId, confirmParams(p.email, p.name), p.name, p.email);
       EMAIL.log(eventId, p.email, subj, 'confirmation');
       toast(`Confirmation sent to ${p.name}`, 'email', 4000);
     });
+    // Also notify the scheduler
+    if (S.user?.email) {
+      console.log('[LexSchedule] Sending confirmation copy to scheduler:', S.user.email);
+      EMAIL._send(templateId, confirmParams(S.user.email, S.user.name || 'Scheduling Coordinator'), S.user.name, S.user.email);
+      EMAIL.log(eventId, S.user.email, subj, 'confirmation');
+    }
     EMAIL.addHistory(eventId, `Confirmation emails sent to all ${ev.participants.length} participant(s)`);
   },
 
