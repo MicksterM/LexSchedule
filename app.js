@@ -1050,12 +1050,13 @@ const EVENTS = {
     const ev = S.events.find(e=>e.id===eventId);
     if (!ev) return;
     ev.status = 'draft';
+    ev.mode = '';
     ev.confirmedSlot = null;
     ev.participants.forEach(p => { p.status='pending'; p.availability={}; });
     ev.proposedSlots = [];
     EMAIL.addHistory(eventId, 'Scheduling process restarted — availability cleared');
     STORE.save();
-    toast('Process restarted. Please add new proposed dates and re-send invitations.', 'info', 5000);
+    toast('Process restarted. Please select a scheduling mode and send new invitations.', 'info', 5000);
     ROUTER.go(`/event/${eventId}`);
   },
   deleteConfirmed(eventId) {
@@ -2189,10 +2190,63 @@ const VIEWS = {
         <!-- Main grid — branches on mode -->
         <div>
           ${ev.status === 'draft' ? `
-          <!-- DRAFT MODE: propose new dates after restart -->
+          <!-- DRAFT MODE: mode selection → propose or poll setup -->
           <div>
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+            ${!ev.mode ? `
+            <!-- Step 1: choose scheduling mode -->
+            <h3 style="font-family:'Cormorant Garamond',serif;font-size:1.3rem;font-weight:600;color:#0B1F3A;margin-bottom:4px;">How would you like to reschedule?</h3>
+            <div style="width:40px;height:2px;background:#C09D5F;margin-bottom:20px;"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px;">
+              <button onclick="DRAFT_selectMode('${ev.id}','propose')" style="padding:26px 20px;border:2px solid #D5CCBA;border-radius:14px;background:#fff;cursor:pointer;text-align:left;font-family:'Montserrat',sans-serif;width:100%;transition:all .2s;" onmouseover="this.style.borderColor='#9CA3AF'" onmouseout="this.style.borderColor='#D5CCBA'">
+                <div style="font-size:2rem;margin-bottom:12px;">📋</div>
+                <div style="font-family:'Cormorant Garamond',serif;font-size:1.2rem;font-weight:600;color:#0B1F3A;margin-bottom:6px;">Propose Meeting Times</div>
+                <div style="font-size:.78rem;color:#6B7280;line-height:1.6;">You select specific dates and times. Participants confirm availability for each proposed slot.</div>
+              </button>
+              <button onclick="DRAFT_selectMode('${ev.id}','poll')" style="padding:26px 20px;border:2px solid #D5CCBA;border-radius:14px;background:#fff;cursor:pointer;text-align:left;font-family:'Montserrat',sans-serif;width:100%;transition:all .2s;" onmouseover="this.style.borderColor='#9CA3AF'" onmouseout="this.style.borderColor='#D5CCBA'">
+                <div style="font-size:2rem;margin-bottom:12px;">📊</div>
+                <div style="font-family:'Cormorant Garamond',serif;font-size:1.2rem;font-weight:600;color:#0B1F3A;margin-bottom:6px;">Poll for Availability</div>
+                <div style="font-size:.78rem;color:#6B7280;line-height:1.6;">Set a date range. Participants mark when they're free using a morning/afternoon grid.</div>
+              </button>
+            </div>
+            ` : ev.mode === 'poll' ? `
+            <!-- Poll mode: date range + blocks setup -->
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+              <h3 style="font-family:'Cormorant Garamond',serif;font-size:1.3rem;font-weight:600;color:#0B1F3A;">Set Availability Range</h3>
+              <button onclick="DRAFT_selectMode('${ev.id}','')" style="padding:4px 10px;border:1px solid #D5CCBA;border-radius:6px;background:#fff;color:#6B7280;font-size:.7rem;cursor:pointer;font-family:'Montserrat',sans-serif;">← Change Mode</button>
+            </div>
+            <p style="font-size:.82rem;color:#6B7280;margin-bottom:20px;">Specify the window of dates within which participants will mark their availability.</p>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+              <div>
+                <label style="display:block;font-size:.72rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#0B1F3A;margin-bottom:6px;">Earliest Possible Date *</label>
+                <input id="draft-poll-start" type="date" style="width:100%;box-sizing:border-box;padding:10px 14px;border:1.5px solid #D5CCBA;border-radius:8px;font-size:.875rem;font-family:'Montserrat',sans-serif;outline:none;" onfocus="this.style.borderColor='#0B1F3A'" onblur="this.style.borderColor='#D5CCBA'">
+              </div>
+              <div>
+                <label style="display:block;font-size:.72rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#0B1F3A;margin-bottom:6px;">Latest Possible Date *</label>
+                <input id="draft-poll-end" type="date" style="width:100%;box-sizing:border-box;padding:10px 14px;border:1.5px solid #D5CCBA;border-radius:8px;font-size:.875rem;font-family:'Montserrat',sans-serif;outline:none;" onfocus="this.style.borderColor='#0B1F3A'" onblur="this.style.borderColor='#D5CCBA'">
+              </div>
+            </div>
+            <div style="margin-bottom:20px;">
+              <label style="display:block;font-size:.72rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#0B1F3A;margin-bottom:10px;">Time Blocks to Include</label>
+              <div style="display:flex;gap:12px;">
+                ${POLL.BLOCKS.map(blk => `
+                <label style="display:flex;align-items:center;gap:10px;padding:12px 18px;border:1.5px solid #D5CCBA;border-radius:8px;cursor:pointer;background:#fff;flex:1;">
+                  <input type="checkbox" name="draft-poll-block" value="${blk.id}" checked style="accent-color:#0B1F3A;width:15px;height:15px;">
+                  <span><div style="font-size:.84rem;font-weight:600;color:#0B1F3A;">${blk.label}</div><div style="font-size:.72rem;color:#9CA3AF;">${blk.short.replace('9a','9:00 AM').replace('12p','12:00 PM').replace('6p','6:00 PM').replace('–',' – ')}</div></span>
+                </label>`).join('')}
+              </div>
+            </div>
+            <label style="display:flex;align-items:center;gap:10px;font-size:.84rem;color:#4B5563;cursor:pointer;margin-bottom:24px;">
+              <input type="checkbox" id="draft-poll-weekdays" checked style="accent-color:#0B1F3A;width:15px;height:15px;">
+              <span>Weekdays only (Monday – Friday)</span>
+            </label>
+            <div style="display:flex;justify-content:flex-end;">
+              <button onclick="DRAFT_sendPoll('${ev.id}')" style="padding:12px 32px;border:none;border-radius:8px;font-size:.82rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;background:#0B1F3A;color:#fff;font-family:'Montserrat',sans-serif;box-shadow:0 4px 12px rgba(11,31,58,.2);">Send Invitations ✉</button>
+            </div>
+            ` : `
+            <!-- Propose mode: date/time slot picker -->
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
               <h3 style="font-family:'Cormorant Garamond',serif;font-size:1.3rem;font-weight:600;color:#0B1F3A;">Propose New Dates</h3>
+              <button onclick="DRAFT_selectMode('${ev.id}','')" style="padding:4px 10px;border:1px solid #D5CCBA;border-radius:6px;background:#fff;color:#6B7280;font-size:.7rem;cursor:pointer;font-family:'Montserrat',sans-serif;">← Change Mode</button>
             </div>
             <div style="background:#EBF0F7;border:1px solid #BFCCDD;border-radius:10px;padding:14px 18px;margin-bottom:18px;font-size:.82rem;color:#1A4A7A;display:flex;gap:8px;align-items:center;">
               <span>ℹ️</span><span>Add the new proposed dates below, then click <strong>Send Invitations</strong> to notify all participants.</span>
@@ -2223,6 +2277,7 @@ const VIEWS = {
             <div style="display:flex;justify-content:flex-end;">
               <button onclick="DRAFT_sendInvitations('${ev.id}')" style="padding:12px 32px;border:none;border-radius:8px;font-size:.82rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;background:#0B1F3A;color:#fff;font-family:'Montserrat',sans-serif;box-shadow:0 4px 12px rgba(11,31,58,.2);">Send Invitations ✉</button>
             </div>
+            `}
           </div>
           ` : ev.mode === 'poll' ? `
           <!-- POLL MODE: aggregate grid -->
@@ -3206,6 +3261,37 @@ window.DRAFT_removeSlot = function(eventId, slotId) {
   if (!ev) return;
   ev.proposedSlots = ev.proposedSlots.filter(s=>s.id!==slotId);
   STORE.save();
+  VIEWS.eventDetail(eventId);
+};
+
+window.DRAFT_selectMode = function(eventId, mode) {
+  const ev = S.events.find(e=>e.id===eventId);
+  if (!ev) return;
+  ev.mode = mode;
+  ev.proposedSlots = [];
+  STORE.save();
+  VIEWS.eventDetail(eventId);
+};
+
+window.DRAFT_sendPoll = function(eventId) {
+  const ev = S.events.find(e=>e.id===eventId);
+  if (!ev) return;
+  const startDate = document.getElementById('draft-poll-start')?.value;
+  const endDate   = document.getElementById('draft-poll-end')?.value;
+  if (!startDate || !endDate) { toast('Please enter both a start and end date.','error'); return; }
+  if (endDate < startDate)    { toast('End date must be on or after the start date.','error'); return; }
+  const weekdaysOnly = document.getElementById('draft-poll-weekdays')?.checked !== false;
+  const selectedBlocks = [...document.querySelectorAll('input[name="draft-poll-block"]:checked')].map(el => el.value);
+  if (!selectedBlocks.length) { toast('Please select at least one time block.','error'); return; }
+  ev.proposedSlots = POLL.slotsFromRange(startDate, endDate, weekdaysOnly, selectedBlocks);
+  ev.pollRange = { startDate, endDate };
+  ev.pollWeekdaysOnly = weekdaysOnly;
+  ev.status = 'active';
+  EMAIL.addHistory(eventId, `Poll invitations re-sent to ${ev.participants.length} participant(s) — new availability range set`);
+  STORE.save();
+  EMAIL.sendInvitations(eventId);
+  STORE.save();
+  toast(`Invitations sent to ${ev.participants.length} participant(s).`, 'success', 5000);
   VIEWS.eventDetail(eventId);
 };
 
