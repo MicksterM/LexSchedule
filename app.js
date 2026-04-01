@@ -2179,7 +2179,43 @@ const VIEWS = {
       <div style="display:grid;grid-template-columns:1fr 320px;gap:20px;align-items:start;">
         <!-- Main grid — branches on mode -->
         <div>
-          ${ev.mode === 'poll' ? `
+          ${ev.status === 'draft' ? `
+          <!-- DRAFT MODE: propose new dates after restart -->
+          <div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+              <h3 style="font-family:'Cormorant Garamond',serif;font-size:1.3rem;font-weight:600;color:#0B1F3A;">Propose New Dates</h3>
+            </div>
+            <div style="background:#EBF0F7;border:1px solid #BFCCDD;border-radius:10px;padding:14px 18px;margin-bottom:18px;font-size:.82rem;color:#1A4A7A;display:flex;gap:8px;align-items:center;">
+              <span>ℹ️</span><span>Add the new proposed dates below, then click <strong>Send Invitations</strong> to notify all participants.</span>
+            </div>
+            ${ev.proposedSlots.length ? `
+            <div style="margin-bottom:16px;">
+              ${ev.proposedSlots.map(s => `
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border:1px solid #EDE6D9;border-radius:8px;background:#fff;margin-bottom:8px;">
+                <div>
+                  <div style="font-size:.86rem;font-weight:600;color:#0B1F3A;">${fmtDate(s.date)}</div>
+                  <div style="font-size:.76rem;color:#6B7280;">${fmtTime(s.startTime)} – ${fmtTime(s.endTime)}</div>
+                </div>
+                <button onclick="DRAFT_removeSlot('${ev.id}','${s.id}')" style="padding:5px 12px;border:1px solid #FCA5A5;border-radius:6px;background:#FBE9EC;color:#8B1C2E;font-size:.72rem;font-weight:600;cursor:pointer;font-family:'Montserrat',sans-serif;">Remove</button>
+              </div>`).join('')}
+            </div>` : ''}
+            <div style="border:1.5px dashed #D5CCBA;border-radius:10px;padding:20px;background:#FAFAF8;margin-bottom:20px;">
+              <h4 style="font-size:.84rem;font-weight:600;color:#0B1F3A;margin-bottom:14px;">Add Time Slot</h4>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px;">
+                <div><label style="display:block;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#0B1F3A;margin-bottom:5px;">Date *</label>
+                  <input id="draft-date" type="date" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid #D5CCBA;border-radius:7px;font-size:.84rem;font-family:'Montserrat',sans-serif;outline:none;" onfocus="this.style.borderColor='#0B1F3A'" onblur="this.style.borderColor='#D5CCBA'"></div>
+                <div><label style="display:block;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#0B1F3A;margin-bottom:5px;">Start Time *</label>
+                  <input id="draft-start" type="time" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid #D5CCBA;border-radius:7px;font-size:.84rem;font-family:'Montserrat',sans-serif;outline:none;" onfocus="this.style.borderColor='#0B1F3A'" onblur="this.style.borderColor='#D5CCBA'" onchange="applySlotTimeDefault('draft-start','draft-end')"></div>
+                <div><label style="display:block;font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#0B1F3A;margin-bottom:5px;">End Time *</label>
+                  <input id="draft-end" type="time" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid #D5CCBA;border-radius:7px;font-size:.84rem;font-family:'Montserrat',sans-serif;outline:none;" onfocus="this.style.borderColor='#0B1F3A'" onblur="this.style.borderColor='#D5CCBA'" onchange="applySlotTimeDefault('draft-end',null)"></div>
+              </div>
+              <button onclick="DRAFT_addSlot('${ev.id}')" style="padding:9px 20px;border:none;border-radius:7px;font-size:.76rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;background:#C09D5F;color:#0B1F3A;font-family:'Montserrat',sans-serif;">+ Add Slot</button>
+            </div>
+            <div style="display:flex;justify-content:flex-end;">
+              <button onclick="DRAFT_sendInvitations('${ev.id}')" style="padding:12px 32px;border:none;border-radius:8px;font-size:.82rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;background:#0B1F3A;color:#fff;font-family:'Montserrat',sans-serif;box-shadow:0 4px 12px rgba(11,31,58,.2);">Send Invitations ✉</button>
+            </div>
+          </div>
+          ` : ev.mode === 'poll' ? `
           <!-- POLL MODE: aggregate grid -->
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:10px;">
             <h3 style="font-family:'Cormorant Garamond',serif;font-size:1.3rem;font-weight:600;color:#0B1F3A;">Availability Poll Grid</h3>
@@ -3140,6 +3176,41 @@ window.CREATE_addSlot = function() {
 window.CREATE_removeSlot = function(i) {
   S.createData.slots.splice(i,1);
   VIEWS.createEvent();
+};
+
+window.DRAFT_addSlot = function(eventId) {
+  const ev = S.events.find(e=>e.id===eventId);
+  if (!ev) return;
+  const date  = document.getElementById('draft-date')?.value;
+  const start = document.getElementById('draft-start')?.value;
+  const end   = document.getElementById('draft-end')?.value;
+  if (!date || !start || !end) { toast('Please select a date, start time, and end time.','error'); return; }
+  if (start >= end) { toast('End time must be after start time.','error'); return; }
+  if (ev.proposedSlots.find(s=>s.date===date&&s.startTime===start)) { toast('This slot has already been added.','error'); return; }
+  ev.proposedSlots.push({ id: uid(), date, startTime: start, endTime: end });
+  STORE.save();
+  VIEWS.eventDetail(eventId);
+};
+
+window.DRAFT_removeSlot = function(eventId, slotId) {
+  const ev = S.events.find(e=>e.id===eventId);
+  if (!ev) return;
+  ev.proposedSlots = ev.proposedSlots.filter(s=>s.id!==slotId);
+  STORE.save();
+  VIEWS.eventDetail(eventId);
+};
+
+window.DRAFT_sendInvitations = function(eventId) {
+  const ev = S.events.find(e=>e.id===eventId);
+  if (!ev) return;
+  if (ev.proposedSlots.length < 1) { toast('Please add at least one time slot before sending invitations.','error'); return; }
+  ev.status = 'active';
+  EMAIL.addHistory(eventId, `Invitations re-sent to ${ev.participants.length} participant(s) with ${ev.proposedSlots.length} new proposed date(s)`);
+  STORE.save();
+  EMAIL.sendInvitations(eventId);
+  STORE.save();
+  toast(`Invitations sent to ${ev.participants.length} participant(s).`, 'success', 5000);
+  VIEWS.eventDetail(eventId);
 };
 
 window.CREATE_next3 = function() {
