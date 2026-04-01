@@ -3428,19 +3428,30 @@ window.RESPOND_submit = function(token, eventId, participantId) {
     });
   }
   p.status = 'responded';
-  ev.history = ev.history || [];
-  if (comment) {
-    ev.history.push({ ts: Date.now(), action: `${p.name} responded with note: "${comment}"`, user: p.name });
-  } else {
-    ev.history.push({ ts: Date.now(), action: `${p.name} submitted availability`, user: 'System' });
-  }
+  const histEntry = comment
+    ? { ts: Date.now(), action: `${p.name} responded with note: "${comment}"`, user: p.name }
+    : { ts: Date.now(), action: `${p.name} submitted availability`, user: 'System' };
   delete (window._respondState||{})[token];
-  // Save: either via STORE (logged in) or directly to Firestore (public recipient)
+  // Save: either via STORE (logged in) or via Firestore transaction (public recipient).
+  // Use a transaction for public recipients so concurrent submissions don't overwrite each other.
   if (S.user) {
+    ev.history = ev.history || [];
+    ev.history.push(histEntry);
     AVAIL.checkAutoConfirm(eventId);
     STORE.save();
   } else if (cached?.firmId) {
-    db.collection('firms').doc(cached.firmId).collection('events').doc(eventId).set(ev).catch(console.error);
+    const ref = db.collection('firms').doc(cached.firmId).collection('events').doc(eventId);
+    db.runTransaction(t => t.get(ref).then(doc => {
+      if (!doc.exists) return;
+      const latest = doc.data();
+      const idx = latest.participants.findIndex(x => x.id === participantId);
+      if (idx === -1) return;
+      latest.participants[idx].availability = p.availability;
+      latest.participants[idx].status = 'responded';
+      latest.history = latest.history || [];
+      latest.history.push(histEntry);
+      t.set(ref, latest);
+    })).catch(console.error);
   }
   const confirmed = ev.confirmedSlot ? ev.proposedSlots.find(s=>s.id===ev.confirmedSlot) : null;
   render(VIEWS.respondThankYou(ev, p, confirmed));
