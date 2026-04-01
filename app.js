@@ -1057,7 +1057,7 @@ const EVENTS = {
     EMAIL.addHistory(eventId, 'Scheduling process restarted — availability cleared');
     STORE.save();
     toast('Process restarted. Please select a scheduling mode and send new invitations.', 'info', 5000);
-    ROUTER.go(`/event/${eventId}`);
+    VIEWS.eventDetail(eventId);
   },
   deleteConfirmed(eventId) {
     const password = document.getElementById('del-password')?.value;
