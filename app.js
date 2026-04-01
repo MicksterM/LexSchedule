@@ -2512,7 +2512,8 @@ const VIEWS = {
         if (!window._respondCache) window._respondCache = {};
         window._respondCache[token] = { ev: loadedEv, firmId };
         VIEWS._renderRespond(token, loadedEv, loadedP);
-      }).catch(() => {
+      }).catch(err => {
+        console.error('[LexSchedule] respond load error:', err);
         render(`<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#F6F1E9;">
           <div style="text-align:center;padding:40px;"><h2 style="font-family:'Cormorant Garamond',serif;font-size:1.8rem;color:#0B1F3A;margin-bottom:12px;">Unable to Load Invitation</h2>
           <p style="font-size:.9rem;color:#6B7280;">Please check your internet connection and try again.</p></div>
