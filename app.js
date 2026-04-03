@@ -2169,7 +2169,7 @@ const VIEWS = {
           <div>
             <div style="font-size:.62rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#C09D5F;margin-bottom:4px;">Confirmed Meeting Date</div>
             <div style="font-family:'Cormorant Garamond',serif;font-size:1.5rem;font-weight:600;color:#fff;">${fmtDate(confirmed.date)}</div>
-            <div style="font-size:.84rem;color:rgba(255,255,255,.65);margin-top:3px;">${fmtTime(confirmed.startTime)} – ${fmtTime(confirmed.endTime)} Eastern · ${esc(ev.location==='phone'&&ev.phoneNumber ? '📞 '+ev.phoneNumber : ev.locationDetails||ev.location)}</div>
+            <div style="font-size:.84rem;color:rgba(255,255,255,.65);margin-top:3px;">${fmtTime(confirmed.startTime)} – ${fmtTime(ev.confirmedEndTime || confirmed.endTime)} Eastern · ${esc(ev.location==='phone'&&ev.phoneNumber ? '📞 '+ev.phoneNumber : ev.locationDetails||ev.location)}</div>
           </div>
           <div style="margin-left:auto;">
             <button onclick="EMAIL.previewModal('${ev.id}','confirmation')" style="padding:9px 18px;border:1px solid rgba(192,157,95,.5);border-radius:8px;font-size:.74rem;font-weight:600;background:transparent;color:#C09D5F;cursor:pointer;font-family:'Montserrat',sans-serif;">View Confirmation Email</button>
@@ -2733,7 +2733,7 @@ const VIEWS = {
           <div style="background:linear-gradient(135deg,#0B1F3A,#162d52);border:2px solid #C09D5F;border-radius:12px;padding:20px 24px;margin:20px 0;text-align:left;">
             <div style="font-size:.62rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#C09D5F;margin-bottom:6px;">Confirmed Date & Time</div>
             <div style="font-family:'Cormorant Garamond',serif;font-size:1.5rem;font-weight:600;color:#fff;">${fmtDate(confirmed.date)}</div>
-            <div style="font-size:.84rem;color:rgba(255,255,255,.65);margin-top:4px;">${fmtTime(confirmed.startTime)} – ${fmtTime(confirmed.endTime)} Eastern</div>
+            <div style="font-size:.84rem;color:rgba(255,255,255,.65);margin-top:4px;">${fmtTime(confirmed.startTime)} – ${fmtTime(ev.confirmedEndTime || confirmed.endTime)} Eastern</div>
             ${ev.location==='phone'&&ev.phoneNumber?`<div style="font-size:.82rem;color:rgba(255,255,255,.65);margin-top:4px;">📞 ${esc(ev.phoneNumber)}</div>`:''}
             ${ev.locationDetails?`<div style="font-size:.82rem;color:rgba(255,255,255,.55);margin-top:4px;">📍 ${esc(ev.locationDetails)}</div>`:''}
           </div>` : `
@@ -3485,7 +3485,7 @@ window.EVENTS_printLog = function(eventId) {
     <div class="meta-row"><strong>Case No.:</strong> ${esc(ev.caseNumber||'—')}</div>
     <div class="meta-row"><strong>Type:</strong> ${esc(ev.type||'—')}</div>
     <div class="meta-row"><strong>Status:</strong> ${esc(ev.status||'—')}</div>
-    ${confirmed ? `<div class="meta-row"><strong>Confirmed Date:</strong> ${fmtDate(confirmed.date)}, ${fmtTime(confirmed.startTime)} – ${fmtTime(confirmed.endTime)}</div>` : ''}
+    ${confirmed ? `<div class="meta-row"><strong>Confirmed Date:</strong> ${fmtDate(confirmed.date)}, ${fmtTime(confirmed.startTime)} – ${fmtTime(ev.confirmedEndTime || confirmed.endTime)}</div>` : ''}
     <div class="meta-row"><strong>Scheduler:</strong> ${esc(S.user?.name||'—')}</div>
   </div>
   <table><thead><tr><th style="width:160px;">Date / Time</th><th>Activity</th></tr></thead><tbody>${rows}</tbody></table>
