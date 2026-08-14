@@ -308,7 +308,7 @@ const ROUTER = {
     if (route === 'dashboard') return VIEWS.dashboard();
     if (route === 'new') {
       S.createStep = 0;
-      S.createData = { mode:'', slots:[], participants:[], type:'', matterName:'', caseNumber:'', description:'', location:'in-person', locationDetails:'', phoneNumber:'', schedulerPhone:'', pollRange:{ startDate:'', endDate:'' }, pollWeekdaysOnly:true, deadline:'', notes:'' };
+      S.createData = { mode:'', slots:[], participants:[], type:'', matterName:'', caseNumber:'', description:'', location:'in-person', locationDetails:'', phoneNumber:'', schedulerPhone:'', pollRange:{ startDate:'', endDate:'' }, pollWeekdaysOnly:true, durationMinutes:60, deadline:'', notes:'' };
       return VIEWS.createEvent();
     }
     if (route === 'event' && parts[0]) return VIEWS.eventDetail(parts[0]);
@@ -506,7 +506,8 @@ const EMAIL = {
       const label  = blocks.length === 2 ? 'Morning &amp; Afternoon'
         : blocks[0] === 'AM' ? 'Morning (9:00 AM – 12:00 PM)'
         : 'Afternoon (12:00 PM – 6:00 PM)';
-      return `<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #EDE6D9;border-radius:6px;background:#ffffff;"><tr><td style="padding:10px 14px;font-size:13px;color:#374151;">Please indicate your availability between <strong>${start}</strong> and <strong>${end}</strong> (${label}).</td></tr></table>`;
+      const durLabel = POLL.fmtDuration(POLL.duration(ev));
+      return `<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #EDE6D9;border-radius:6px;background:#ffffff;"><tr><td style="padding:10px 14px;font-size:13px;color:#374151;">Please indicate your availability between <strong>${start}</strong> and <strong>${end}</strong> (${label}).<br><br>This meeting is expected to take <strong>${durLabel}</strong>. You will mark 30-minute blocks &mdash; consecutive blocks are combined, so please mark every block you are free.</td></tr></table>`;
     }
     return ev.proposedSlots.map(s =>
       `<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:5px;border:1px solid #EDE6D9;border-radius:6px;background:#ffffff;">` +
@@ -553,6 +554,7 @@ const EMAIL = {
         case_number:   ev.caseNumber || 'N/A',
         event_type:    et.label || ev.type,
         deadline:      deadline,
+        meeting_duration: ev.mode === 'poll' ? POLL.fmtDuration(POLL.duration(ev)) : '',
         proposed_slots: slotsText,
         respond_url:   respondUrl,
         firm_name:     S.user?.firm || 'LexSchedule',
@@ -701,12 +703,13 @@ const EMAIL = {
           <div class="email-preview-detail-row"><span class="email-preview-detail-label">Case No.:</span><span class="email-preview-detail-value">${esc(ev.caseNumber||'N/A')}</span></div>
           ${isPoll
             ? `<div class="email-preview-detail-row"><span class="email-preview-detail-label">Availability Window:</span><span class="email-preview-detail-value">${pollDateRange}</span></div>
-               <div class="email-preview-detail-row"><span class="email-preview-detail-label">Time Blocks:</span><span class="email-preview-detail-value">${pollBlockLabel}</span></div>`
+               <div class="email-preview-detail-row"><span class="email-preview-detail-label">Time Blocks:</span><span class="email-preview-detail-value">${pollBlockLabel}</span></div>
+               <div class="email-preview-detail-row"><span class="email-preview-detail-label">Meeting Length:</span><span class="email-preview-detail-value">${POLL.fmtDuration(POLL.duration(ev))}</span></div>`
             : `<div class="email-preview-detail-row"><span class="email-preview-detail-label">Proposed Dates:</span><span class="email-preview-detail-value">${ev.proposedSlots.map(s=>`${fmtDate(s.date)} ${fmtTime(s.startTime)}–${fmtTime(s.endTime)}`).join('<br>')}</span></div>`}
           <div class="email-preview-detail-row"><span class="email-preview-detail-label">Response Deadline:</span><span class="email-preview-detail-value">${ev.deadline ? fmtDate(new Date(ev.deadline).toISOString().slice(0,10)) : 'As Soon As Possible'}</span></div>
         </div>
         ${isPoll
-          ? `<p>Please click the button below to open your personal availability grid and mark the half-hour blocks when you are free during this window.</p>`
+          ? `<p>Please click the button below to open your personal availability grid and mark the half-hour blocks when you are free during this window. Consecutive blocks are combined, so please mark every block you are free &mdash; the meeting needs ${POLL.fmtDuration(POLL.duration(ev))}.</p>`
           : `<p>Please indicate your availability by clicking the button below. Your prompt response is greatly appreciated.</p>`}
         <div class="email-preview-cta"><a class="email-preview-btn" href="#">${isPoll ? 'Mark My Availability' : 'Indicate My Availability'}</a></div>
         <p>If you have any questions, please contact our office.</p>`;
@@ -787,11 +790,12 @@ const AVAIL = {
     if (ev.mode === 'poll') {
       // Poll mode: just notify scheduler; they confirm from the event detail grid
       if (POLL.allResponded(ev)) {
-        const matches = POLL.matchSlots(ev);
-        if (matches.length) {
-          toast(`All participants responded. ${matches.length} available time slot${matches.length>1?'s':''} found — review and confirm.`, 'success', 7000);
+        const windows  = POLL.matchWindows(ev);
+        const durLabel = POLL.fmtDuration(POLL.duration(ev));
+        if (windows.length) {
+          toast(`All participants responded. ${windows.length} ${durLabel} window${windows.length>1?'s':''} work for everyone — review and confirm.`, 'success', 7000);
         } else {
-          toast('All participants responded, but no single slot works for everyone. Review the availability grid and schedule anyway if needed.', 'warning', 8000);
+          toast(`All participants responded, but no ${durLabel} window works for everyone. Review the availability grid and schedule anyway if needed.`, 'warning', 8000);
         }
       }
       return;
@@ -817,6 +821,11 @@ const POLL = {
     { id:'AM', label:'Morning',   short:'9a–12p', start:'09:00', end:'12:00' },
     { id:'PM', label:'Afternoon', short:'12p–6p', start:'12:00', end:'18:00' },
   ],
+
+  // Participants mark availability in 30-minute blocks; longer meetings are
+  // matched by aggregating consecutive blocks.
+  SLOT_MINUTES: 30,
+  DURATION_OPTIONS: [30, 60, 90, 120, 150, 180, 240, 300, 360, 480],
 
   // Generate half-hour time strings within a block (e.g. ['09:00','09:30',...,'11:30'])
   halfHours(block) {
@@ -879,10 +888,92 @@ const POLL = {
     return { total: ev.participants.length, responded, available };
   },
 
-  matchSlots(ev) {
+  // Requested meeting length in minutes, snapped to the 30-minute grid.
+  // Legacy poll events carry no duration — they behave as before (one 30-min slot).
+  duration(ev) {
+    const raw = Number(ev?.durationMinutes) || POLL.SLOT_MINUTES;
+    return Math.max(POLL.SLOT_MINUTES, Math.round(raw / POLL.SLOT_MINUTES) * POLL.SLOT_MINUTES);
+  },
+
+  // How many consecutive 30-minute blocks the meeting needs
+  slotsNeeded(ev) { return POLL.duration(ev) / POLL.SLOT_MINUTES; },
+
+  fmtDuration(mins) {
+    const m = Math.max(0, Number(mins) || 0);
+    const h = Math.floor(m / 60), r = m % 60;
+    if (!h) return `${r} minutes`;
+    const hLbl = `${h} hour${h > 1 ? 's' : ''}`;
+    return r ? `${hLbl} ${r} min` : hLbl;
+  },
+
+  // Every 30-minute block where all responded participants are free (duration ignored)
+  fullAgreementSlots(ev) {
     const responded = ev.participants.filter(p => p.status !== 'pending');
     if (!responded.length) return [];
     return (ev.proposedSlots||[]).filter(s => responded.every(p => (p.availability||{})[s.id] === 'available'));
+  },
+
+  // Runs of consecutive same-day blocks that are long enough for the requested
+  // duration and where every responded participant is free for the whole run.
+  matchWindows(ev) {
+    const responded = ev.participants.filter(p => p.status !== 'pending');
+    if (!responded.length) return [];
+    const need = POLL.slotsNeeded(ev);
+    const free = new Set(POLL.fullAgreementSlots(ev).map(s => s.id));
+    const byDate = {};
+    (ev.proposedSlots||[]).forEach(s => { (byDate[s.date] = byDate[s.date] || []).push(s); });
+    const windows = [];
+    Object.keys(byDate).sort().forEach(date => {
+      const day = byDate[date].slice().sort((a, b) => a.startTime.localeCompare(b.startTime));
+      for (let i = 0; i + need <= day.length; i++) {
+        const run = day.slice(i, i + need);
+        const contiguous = run.every((s, k) => k === 0 || run[k-1].endTime === s.startTime);
+        if (contiguous && run.every(s => free.has(s.id))) {
+          windows.push({
+            date,
+            startTime: run[0].startTime,
+            endTime:   run[run.length-1].endTime,
+            slotIds:   run.map(s => s.id),
+            slots:     run,
+          });
+        }
+      }
+    });
+    return windows;
+  },
+
+  matchSlotIds(ev) {
+    const ids = new Set();
+    POLL.matchWindows(ev).forEach(w => w.slotIds.forEach(id => ids.add(id)));
+    return ids;
+  },
+
+  // Blocks belonging to at least one window long enough for the meeting
+  matchSlots(ev) {
+    const ids = POLL.matchSlotIds(ev);
+    return (ev.proposedSlots || []).filter(s => ids.has(s.id));
+  },
+
+  // The qualifying window that begins at this block, if any
+  windowStartingAt(ev, slotId) {
+    return POLL.matchWindows(ev).find(w => w.slotIds[0] === slotId) || null;
+  },
+
+  // Colour treatment for one admin grid cell
+  cellVisual(ev, slot, matchIds) {
+    const s        = POLL.slotSummary(ev, slot.id);
+    const durLabel = POLL.fmtDuration(POLL.duration(ev));
+    if (matchIds.has(slot.id))
+      return { bg:'#DCFCE7', txt:'#166534', bdr:'2px solid #16A34A', tick:true,
+               title:`Everyone free — part of a full ${durLabel} window` };
+    if (s.responded === 0)
+      return { bg:'#F9FAFB', txt:'#D1D5DB', bdr:'1px solid #E5E7EB', tick:false, title:'No responses yet' };
+    if (s.available === 0)
+      return { bg:'#FEE2E2', txt:'#B91C1C', bdr:'1px solid #E5E7EB', tick:false, title:'No one is available' };
+    if (s.available === s.responded)
+      return { bg:'#F0FDF4', txt:'#15803D', bdr:'1px dashed #86EFAC', tick:false,
+               title:`Everyone free, but not part of a ${durLabel} consecutive window` };
+    return { bg:'#FEF3C7', txt:'#92400E', bdr:'1px solid #E5E7EB', tick:false, title:'Some participants available' };
   },
 
   allResponded(ev) { return ev.participants.every(p => p.status !== 'pending'); },
@@ -892,7 +983,9 @@ const POLL = {
     const { token, isAdmin } = opts;
     const dates     = POLL.uniqueDates(ev.proposedSlots);
     const byDate    = POLL.slotsByDate(ev.proposedSlots);
-    const matches   = new Set(POLL.matchSlots(ev).map(s => s.id));
+    const matches   = POLL.matchSlotIds(ev);
+    const duration  = POLL.duration(ev);
+    const durLabel  = POLL.fmtDuration(duration);
     const participant = token ? ev.participants.find(p => p.token === token) : null;
     const rs = (token && window._respondState?.[token]) ? window._respondState[token] : {};
 
@@ -903,17 +996,14 @@ const POLL = {
 
     // Admin summary cell: count, clickable to select / show detail
     const adminCell = (slot) => {
-      const s = POLL.slotSummary(ev, slot.id);
-      const isMatch = matches.has(slot.id);
-      const bg  = s.responded === 0 ? '#F9FAFB' : s.available === 0 ? '#FEE2E2' : isMatch ? '#DCFCE7' : '#FEF3C7';
-      const txt = s.responded === 0 ? '#D1D5DB' : s.available === 0 ? '#B91C1C' : isMatch ? '#166534' : '#92400E';
-      const bdr = isMatch ? '2px solid #16A34A' : '1px solid #E5E7EB';
+      const s  = POLL.slotSummary(ev, slot.id);
+      const cv = POLL.cellVisual(ev, slot, matches);
       return `<td style="padding:0;border:1px solid #E5E7EB;">
-        <button id="pollac-${slot.id}" onclick="POLL_selectCell('${ev.id}','${slot.id}')" title="Click to select; click again to view / confirm"
-          style="width:100%;height:34px;border:${bdr};cursor:pointer;background:${bg};transition:all .1s;display:flex;align-items:center;justify-content:center;gap:3px;font-family:'Montserrat',sans-serif;"
+        <button id="pollac-${slot.id}" onclick="POLL_selectCell('${ev.id}','${slot.id}')" title="${esc(cv.title)} — click to select; click again to view / confirm"
+          style="width:100%;height:34px;border:${cv.bdr};cursor:pointer;background:${cv.bg};transition:all .1s;display:flex;align-items:center;justify-content:center;gap:3px;font-family:'Montserrat',sans-serif;"
           onmouseover="this.style.filter='brightness(.92)'" onmouseout="this.style.filter=''">
-          <span style="font-size:.72rem;font-weight:700;color:${txt};">${s.available}/${s.responded}</span>
-          ${isMatch?`<span style="font-size:.55rem;background:#166534;color:#fff;padding:1px 4px;border-radius:2px;letter-spacing:.02em;">✓</span>`:''}
+          <span style="font-size:.72rem;font-weight:700;color:${cv.txt};">${s.available}/${s.responded}</span>
+          ${cv.tick?`<span style="font-size:.55rem;background:#166534;color:#fff;padding:1px 4px;border-radius:2px;letter-spacing:.02em;">✓</span>`:''}
         </button></td>`;
     };
 
@@ -976,12 +1066,24 @@ const POLL = {
       <div style="flex:1;">
         <div id="poll-sel-label" style="font-size:.68rem;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.06em;font-weight:600;"></div>
         <div id="poll-sel-time"  style="font-family:'Cormorant Garamond',serif;font-size:1.1rem;font-weight:600;color:#fff;margin-top:1px;"></div>
+        <div id="poll-sel-note"  style="font-size:.7rem;margin-top:2px;color:rgba(255,255,255,.65);"></div>
       </div>
       <button onclick="POLL_clearSelection('${ev.id}')" style="padding:5px 12px;border:1px solid rgba(255,255,255,.25);border-radius:6px;background:transparent;color:rgba(255,255,255,.7);font-size:.72rem;font-weight:600;cursor:pointer;font-family:'Montserrat',sans-serif;">Clear</button>
       <button onclick="POLL_scheduleSelected('${ev.id}')" style="padding:6px 16px;border:none;border-radius:6px;background:#C09D5F;color:#0B1F3A;font-size:.78rem;font-weight:700;cursor:pointer;font-family:'Montserrat',sans-serif;letter-spacing:.02em;">Schedule →</button>
     </div>` : '';
 
+    const durNote = `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;padding:8px 12px;background:#EBF0F7;border:1px solid #BFCCDD;border-radius:8px;font-size:.78rem;color:#1A4A7A;">
+        <span>⏱</span>
+        <span>Meeting length: <strong>${durLabel}</strong>${duration > POLL.SLOT_MINUTES ? ` &mdash; ${
+          isAdmin
+            ? `only consecutive runs of ${POLL.slotsNeeded(ev)} half-hour blocks where everyone is free count as a match`
+            : `mark every half-hour block you are free; consecutive blocks are combined to make up the ${durLabel}`
+        }` : ''}</span>
+      </div>`;
+
     return `
+    ${durNote}
     <div style="overflow-x:auto;border-radius:10px;border:1px solid #E5E7EB;box-shadow:0 1px 4px rgba(11,31,58,.06);">
       <table style="border-collapse:collapse;min-width:100%;">
         <thead>
@@ -1861,6 +1963,16 @@ const VIEWS = {
 
   createStep1() {
     const cd = S.createData;
+    const isPoll = cd.mode === 'poll';
+    const dur = Number(cd.durationMinutes) || 60;
+    const durationField = isPoll ? `
+      <div style="margin-bottom:18px;">
+        <label style="display:block;font-size:.72rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#0B1F3A;margin-bottom:6px;">Meeting Duration <span style="color:#8B1C2E;">*</span></label>
+        <select id="c-duration" style="width:100%;padding:10px 14px;border:1.5px solid #D5CCBA;border-radius:8px;font-size:.875rem;font-family:'Montserrat',sans-serif;outline:none;" onfocus="this.style.borderColor='#0B1F3A'" onblur="this.style.borderColor='#D5CCBA'">
+          ${POLL.DURATION_OPTIONS.map(m => `<option value="${m}" ${dur===m?'selected':''}>${POLL.fmtDuration(m)}</option>`).join('')}
+        </select>
+        <p style="font-size:.74rem;color:#9CA3AF;margin-top:6px;">Participants mark their availability in 30-minute blocks. The system will only flag a time as a match when everyone is free for enough consecutive blocks to cover this duration.</p>
+      </div>` : '';
     return `
     <div style="padding:28px;">
       <h3 style="font-family:'Cormorant Garamond',serif;font-size:1.4rem;font-weight:600;color:#0B1F3A;margin-bottom:4px;">Event Details</h3>
@@ -1872,6 +1984,7 @@ const VIEWS = {
           ${Object.entries(EVENT_TYPES).map(([k,v])=>`<option value="${k}" ${cd.type===k?'selected':''}>${v.icon} ${v.label}</option>`).join('')}
         </select>
       </div>
+      ${durationField}
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:18px;">
         <div>
           <label style="display:block;font-size:.72rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#0B1F3A;margin-bottom:6px;">Matter / Case Name <span style="color:#8B1C2E;">*</span></label>
@@ -2001,7 +2114,10 @@ const VIEWS = {
     <div style="padding:28px;">
       <h3 style="font-family:'Cormorant Garamond',serif;font-size:1.4rem;font-weight:600;color:#0B1F3A;margin-bottom:4px;">Set Availability Range</h3>
       <div style="width:40px;height:2px;background:#C09D5F;margin-bottom:6px;"></div>
-      <p style="font-size:.82rem;color:#6B7280;margin-bottom:22px;">Specify the window of dates within which participants will mark their availability. The system will find a morning or afternoon block that works for everyone.</p>
+      <p style="font-size:.82rem;color:#6B7280;margin-bottom:14px;">Specify the window of dates within which participants will mark their availability. The system will find a <strong>${POLL.fmtDuration(cd.durationMinutes || 60)}</strong> window that works for everyone.</p>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:20px;padding:9px 14px;background:#EBF0F7;border:1px solid #BFCCDD;border-radius:8px;font-size:.8rem;color:#1A4A7A;">
+        <span>⏱</span><span>Meeting duration: <strong>${POLL.fmtDuration(cd.durationMinutes || 60)}</strong> (${Math.round((cd.durationMinutes || 60)/POLL.SLOT_MINUTES)} consecutive half-hour blocks) &middot; <a onclick="S.createStep=1;VIEWS.createEvent()" style="color:#1A4A7A;text-decoration:underline;cursor:pointer;">change</a></span>
+      </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
         <div>
           <label style="display:block;font-size:.72rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#0B1F3A;margin-bottom:6px;">Earliest Possible Date <span style="color:#8B1C2E;">*</span></label>
@@ -2042,8 +2158,9 @@ const VIEWS = {
           <div style="font-size:.68rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#9CA3AF;margin-bottom:12px;">Availability Range</div>
           <div style="font-size:.82rem;color:#0B1F3A;margin-bottom:4px;"><strong>From:</strong> ${fmtDateShort(cd.pollRange.startDate)}</div>
           <div style="font-size:.82rem;color:#0B1F3A;margin-bottom:4px;"><strong>To:</strong> ${fmtDateShort(cd.pollRange.endDate)}</div>
-          <div style="font-size:.82rem;color:#0B1F3A;"><strong>Days:</strong> ${cd.pollWeekdaysOnly===false?'All days':'Weekdays only'}</div>
-          <div style="margin-top:10px;font-size:.78rem;color:#6B7280;">Participants will receive a grid of 30-minute time slots for each day. They click the blocks when they're free, and the system finds the best mutual slot.</div>
+          <div style="font-size:.82rem;color:#0B1F3A;margin-bottom:4px;"><strong>Days:</strong> ${cd.pollWeekdaysOnly===false?'All days':'Weekdays only'}</div>
+          <div style="font-size:.82rem;color:#0B1F3A;"><strong>Meeting Duration:</strong> ${POLL.fmtDuration(cd.durationMinutes || 60)}</div>
+          <div style="margin-top:10px;font-size:.78rem;color:#6B7280;">Participants will receive a grid of 30-minute time slots for each day. They click the blocks when they're free, and the system combines consecutive blocks to find a mutual ${POLL.fmtDuration(cd.durationMinutes || 60)} window.</div>
         </div>`
       : `<div style="background:#F6F1E9;border-radius:10px;padding:18px;margin-bottom:8px;">
           <div style="font-size:.68rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#9CA3AF;margin-bottom:12px;">Proposed Time Slots (${cd.slots.length})</div>
@@ -2150,6 +2267,7 @@ const VIEWS = {
           <div style="display:flex;gap:18px;flex-wrap:wrap;">
             ${ev.caseNumber?`<span style="font-size:.78rem;color:#9CA3AF;">📁 Case No. ${esc(ev.caseNumber)}</span>`:''}
             <span style="font-size:.78rem;color:#9CA3AF;">👥 ${responded}/${ev.participants.length} responded</span>
+            ${ev.mode === 'poll' ? `<span style="font-size:.78rem;color:#9CA3AF;">⏱ ${POLL.fmtDuration(POLL.duration(ev))} meeting</span>` : ''}
             ${ev.location?`<span style="font-size:.78rem;color:#9CA3AF;">📍 ${ev.location.replace('-',' ')}</span>`:''}
             ${deadline!==null?`<span style="font-size:.78rem;color:${deadline<0?'#DC2626':deadline<=2?'#D97706':'#9CA3AF'};">⏱ ${deadline<0?'Deadline passed':deadline===0?'Due today':`${deadline} days remaining`}</span>`:''}
           </div>
@@ -2214,7 +2332,14 @@ const VIEWS = {
               <h3 style="font-family:'Cormorant Garamond',serif;font-size:1.3rem;font-weight:600;color:#0B1F3A;">Set Availability Range</h3>
               <button onclick="DRAFT_selectMode('${ev.id}','')" style="padding:4px 10px;border:1px solid #D5CCBA;border-radius:6px;background:#fff;color:#6B7280;font-size:.7rem;cursor:pointer;font-family:'Montserrat',sans-serif;">← Change Mode</button>
             </div>
-            <p style="font-size:.82rem;color:#6B7280;margin-bottom:20px;">Specify the window of dates within which participants will mark their availability.</p>
+            <p style="font-size:.82rem;color:#6B7280;margin-bottom:20px;">Specify how long the meeting needs to be and the window of dates within which participants will mark their availability.</p>
+            <div style="margin-bottom:20px;">
+              <label style="display:block;font-size:.72rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#0B1F3A;margin-bottom:6px;">Meeting Duration *</label>
+              <select id="draft-poll-duration" style="width:100%;box-sizing:border-box;padding:10px 14px;border:1.5px solid #D5CCBA;border-radius:8px;font-size:.875rem;font-family:'Montserrat',sans-serif;outline:none;" onfocus="this.style.borderColor='#0B1F3A'" onblur="this.style.borderColor='#D5CCBA'">
+                ${POLL.DURATION_OPTIONS.map(m => `<option value="${m}" ${(Number(ev.durationMinutes)||60)===m?'selected':''}>${POLL.fmtDuration(m)}</option>`).join('')}
+              </select>
+              <p style="font-size:.74rem;color:#9CA3AF;margin-top:6px;">Participants mark 30-minute blocks; consecutive blocks are combined, and only windows this long count as a match.</p>
+            </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
               <div>
                 <label style="display:block;font-size:.72rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#0B1F3A;margin-bottom:6px;">Earliest Possible Date *</label>
@@ -2284,20 +2409,35 @@ const VIEWS = {
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:10px;">
             <h3 style="font-family:'Cormorant Garamond',serif;font-size:1.3rem;font-weight:600;color:#0B1F3A;">Availability Poll Grid</h3>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              <span style="display:flex;align-items:center;gap:5px;font-size:.74rem;color:#4B5563;"><span style="width:14px;height:14px;background:#DCFCE7;border:1.5px solid #16A34A;border-radius:3px;display:inline-block;"></span> All available</span>
+              <span style="display:flex;align-items:center;gap:5px;font-size:.74rem;color:#4B5563;"><span style="width:14px;height:14px;background:#DCFCE7;border:1.5px solid #16A34A;border-radius:3px;display:inline-block;"></span> Fits ${POLL.fmtDuration(POLL.duration(ev))}</span>
+              ${POLL.duration(ev) > POLL.SLOT_MINUTES ? `<span style="display:flex;align-items:center;gap:5px;font-size:.74rem;color:#4B5563;"><span style="width:14px;height:14px;background:#F0FDF4;border:1.5px dashed #86EFAC;border-radius:3px;display:inline-block;"></span> All free, too short</span>` : ''}
               <span style="display:flex;align-items:center;gap:5px;font-size:.74rem;color:#4B5563;"><span style="width:14px;height:14px;background:#FEF3C7;border-radius:3px;display:inline-block;"></span> Some available</span>
               <span style="display:flex;align-items:center;gap:5px;font-size:.74rem;color:#4B5563;"><span style="width:14px;height:14px;background:#F9FAFB;border-radius:3px;display:inline-block;"></span> None available</span>
             </div>
           </div>
-          ${ev.status !== 'confirmed' ? `
-          <div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:10px;padding:13px 16px;margin-bottom:14px;font-size:.82rem;color:#166534;display:flex;gap:8px;align-items:center;">
-            <span>💡</span><span>Cells show <strong>available / responded</strong>. Green-bordered cells mean everyone who has responded is free — click to confirm. You can also schedule any slot regardless of availability.</span>
-          </div>` : ''}
+          ${ev.status !== 'confirmed' ? (() => {
+            const wins = POLL.matchWindows(ev);
+            const durLbl = POLL.fmtDuration(POLL.duration(ev));
+            return `
+          <div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:10px;padding:13px 16px;margin-bottom:14px;font-size:.82rem;color:#166534;display:flex;gap:8px;align-items:flex-start;">
+            <span>💡</span><span>Cells show <strong>available / responded</strong>. A cell is green only when everyone who has responded is free for a full <strong>${durLbl}</strong> run of consecutive blocks starting at or covering that time — click a green cell to select the whole window, then <strong>Schedule</strong>. You can still schedule any slot regardless of availability.</span>
+          </div>
+          ${wins.length ? `
+          <div style="background:#fff;border:1px solid #EDE6D9;border-radius:10px;padding:12px 16px;margin-bottom:14px;">
+            <div style="font-size:.68rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#166534;margin-bottom:8px;">${wins.length} matching ${durLbl} window${wins.length>1?'s':''}</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;">
+              ${wins.map(w => `<button onclick="POLL_selectWindow('${ev.id}','${w.slotIds[0]}')" style="border:1px solid #86EFAC;background:#F0FDF4;border-radius:20px;padding:5px 12px;font-size:.74rem;font-weight:600;color:#166534;cursor:pointer;font-family:'Montserrat',sans-serif;">${new Date(w.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})} · ${POLL.fmtTime(w.startTime)}–${POLL.fmtTime(w.endTime)}</button>`).join('')}
+            </div>
+          </div>` : (ev.participants.some(p => p.status !== 'pending') ? `
+          <div style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:10px;padding:12px 16px;margin-bottom:14px;font-size:.82rem;color:#92400E;display:flex;gap:8px;align-items:flex-start;">
+            <span>⚠️</span><span>No ${durLbl} window works for everyone who has responded so far. Shorter overlaps are shown with a dashed green border.</span>
+          </div>` : '')}`;
+          })() : ''}
           ${POLL.renderGrid(ev, { isAdmin: true })}
           ${ev.status === 'active' || ev.status === 'no-match' ? `
           <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
             <button onclick="POLL_setNoMatch('${ev.id}')" style="padding:8px 18px;border:1px solid #EDE6D9;border-radius:7px;font-size:.76rem;font-weight:600;background:#fff;color:#6B7280;cursor:pointer;font-family:'Montserrat',sans-serif;">Mark No Match</button>
-            <span style="font-size:.74rem;color:#9CA3AF;align-self:center;">← Click any cell in the bottom row to confirm that slot, or use this to declare no match.</span>
+            <span style="font-size:.74rem;color:#9CA3AF;align-self:center;">← Click cells to build a ${POLL.fmtDuration(POLL.duration(ev))} window and schedule it, or use this to declare no match.</span>
           </div>` : ''}
           <p style="font-size:.72rem;color:#9CA3AF;margin-top:8px;">Click <strong>Edit</strong> next to any participant to enter or change their availability on their behalf.</p>
           ` : `
@@ -2397,6 +2537,7 @@ const VIEWS = {
   confirmSlotModal(eventId) {
     const ev = S.events.find(e=>e.id===eventId);
     if (!ev) return;
+    if (ev.mode === 'poll') return VIEWS.confirmWindowModal(eventId);
     const best = AVAIL.bestSlots(ev);
     const totalResponded = ev.participants.filter(p=>p.status!=='pending').length;
     const perfect = best.filter(s => s.score.available === totalResponded && totalResponded > 0);
@@ -2433,6 +2574,39 @@ const VIEWS = {
       <div class="modal-body">
         <p style="font-size:.84rem;color:#4B5563;margin-bottom:18px;">Select the time slot you wish to confirm. A confirmation email will be sent to all participants.</p>
         ${perfectSection}${othersSection}
+      </div>
+      <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal()">Cancel</button></div>`);
+  },
+
+  // Poll mode: offer only windows long enough for the requested meeting duration
+  confirmWindowModal(eventId) {
+    const ev = S.events.find(e=>e.id===eventId);
+    if (!ev) return;
+    const durLabel = POLL.fmtDuration(POLL.duration(ev));
+    const windows  = POLL.matchWindows(ev);
+    const responded = ev.participants.filter(p=>p.status!=='pending').length;
+
+    const card = w => `
+      <div onclick="closeModal();EVENTS.confirm('${eventId}','${w.slotIds[0]}','${w.endTime}')" style="border:2px solid #2D7A4F;border-radius:10px;padding:14px 18px;margin-bottom:10px;cursor:pointer;background:#F0FDF4;transition:all .2s;" onmouseover="this.style.borderColor='#C09D5F';this.style.background='#F5EDD8'" onmouseout="this.style.borderColor='#2D7A4F';this.style.background='#F0FDF4'">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;">
+          <div>
+            <div style="font-family:'Cormorant Garamond',serif;font-size:1.1rem;font-weight:600;color:#0B1F3A;">${fmtDate(w.date)}</div>
+            <div style="font-size:.8rem;color:#6B7280;">${POLL.fmtTime(w.startTime)} – ${POLL.fmtTime(w.endTime)} · ${durLabel}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:.9rem;font-weight:700;color:#276749;">${responded}/${responded} available</div>
+            <div style="font-size:.68rem;font-weight:700;color:#2D7A4F;text-transform:uppercase;letter-spacing:.06em;">All Available</div>
+          </div>
+        </div>
+      </div>`;
+
+    modal.open(`
+      <div class="modal-header"><h3 class="modal-title">Confirm a ${durLabel} Window</h3><button class="modal-close" onclick="closeModal()">✕</button></div>
+      <div class="modal-body">
+        <p style="font-size:.84rem;color:#4B5563;margin-bottom:18px;">${windows.length
+          ? `These are the ${durLabel} windows where every participant who has responded is free for the entire meeting. Selecting one sends confirmation emails to all participants.`
+          : `No ${durLabel} window works for everyone who has responded. Close this and use the availability grid to select consecutive blocks and schedule anyway.`}</p>
+        ${windows.length ? `<p style="font-size:.74rem;font-weight:700;color:#2D7A4F;text-transform:uppercase;letter-spacing:.06em;margin:0 0 10px;">${windows.length} matching window${windows.length>1?'s':''}</p>${windows.map(card).join('')}` : ''}
       </div>
       <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal()">Cancel</button></div>`);
   },
@@ -2676,7 +2850,7 @@ const VIEWS = {
         <!-- Poll grid instructions -->
         <div style="background:#F5EDD8;border:1px solid rgba(192,157,95,.3);border-radius:10px;padding:14px 18px;margin-bottom:18px;display:flex;gap:12px;align-items:flex-start;">
           <span style="font-size:1rem;margin-top:1px;">💡</span>
-          <div style="font-size:.84rem;color:#7A5C20;line-height:1.6;">Click each cell to mark yourself as <strong>Available (✓)</strong> for that morning or afternoon block. Leave unchecked if you are unavailable. Mark as many slots as possible to help find a mutual time.</div>
+          <div style="font-size:.84rem;color:#7A5C20;line-height:1.6;">This ${et.label.toLowerCase()} needs <strong>${POLL.fmtDuration(POLL.duration(ev))}</strong>. Click each cell to mark yourself as <strong>Available (✓)</strong> for that 30-minute block. Leave unchecked if you are unavailable. Consecutive blocks you mark are combined, so please mark every block you are free to help find a window long enough for everyone.</div>
         </div>
         <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px;">
           <div style="display:flex;align-items:center;gap:8px;font-size:.78rem;color:#4B5563;"><div style="width:24px;height:24px;background:#D1FAE5;border-radius:5px;display:flex;align-items:center;justify-content:center;color:#065F46;font-weight:700;">✓</div>Available</div>
@@ -3162,6 +3336,11 @@ window.CREATE_next1 = function() {
   const phone  = document.getElementById('c-phone')?.value.trim();
   if (!type || !matter) { toast('Please select a proceeding type and enter the matter name.','error'); return; }
   if ((loc || 'in-person') === 'phone' && !phone) { toast('Please enter the conference call number.','error'); return; }
+  if (S.createData.mode === 'poll') {
+    const dur = parseInt(document.getElementById('c-duration')?.value, 10);
+    if (!dur) { toast('Please select how long the meeting needs to be.','error'); return; }
+    S.createData.durationMinutes = dur;
+  }
   S.createData.type = type;
   S.createData.matterName = matter;
   S.createData.caseNumber = document.getElementById('c-case')?.value.trim();
@@ -3283,9 +3462,12 @@ window.DRAFT_sendPoll = function(eventId) {
   const weekdaysOnly = document.getElementById('draft-poll-weekdays')?.checked !== false;
   const selectedBlocks = [...document.querySelectorAll('input[name="draft-poll-block"]:checked')].map(el => el.value);
   if (!selectedBlocks.length) { toast('Please select at least one time block.','error'); return; }
+  const duration = parseInt(document.getElementById('draft-poll-duration')?.value, 10);
+  if (!duration) { toast('Please select how long the meeting needs to be.','error'); return; }
   ev.proposedSlots = POLL.slotsFromRange(startDate, endDate, weekdaysOnly, selectedBlocks);
   ev.pollRange = { startDate, endDate };
   ev.pollWeekdaysOnly = weekdaysOnly;
+  ev.durationMinutes = duration;
   ev.status = 'active';
   EMAIL.addHistory(eventId, `Poll invitations re-sent to ${ev.participants.length} participant(s) — new availability range set`);
   STORE.save();
@@ -3339,6 +3521,7 @@ window.CREATE_submit = function() {
     schedulerPhone: cd.schedulerPhone || S.user?.phone || '',
     pollRange: isPoll ? cd.pollRange : null,
     pollWeekdaysOnly: isPoll ? cd.pollWeekdaysOnly : null,
+    durationMinutes: isPoll ? (Number(cd.durationMinutes) || 60) : null,
     proposedSlots,
     participants: cd.participants.map(p => ({
       ...p,
@@ -3355,7 +3538,7 @@ window.CREATE_submit = function() {
   S.events.unshift(newEvent);
   STORE.save();
   S.createStep = 0;
-  S.createData = { mode:'', slots:[], participants:[] };
+  S.createData = { mode:'', slots:[], participants:[], durationMinutes:60 };
   EMAIL.sendInvitations(newEvent.id);
   STORE.save();
   toast(`Scheduling event created. Invitations sent to ${newEvent.participants.length} participant(s).`, 'success', 6000);
@@ -3667,6 +3850,11 @@ window.POLL_selectCell = function(eventId, slotId) {
       return;
     }
     sel.slotIds.splice(idx, 1);
+  } else if (!sel.slotIds.length && POLL.duration(ev) > POLL.SLOT_MINUTES &&
+             (POLL.windowStartingAt(ev, slotId) || POLL.matchWindows(ev).find(w => w.slotIds.includes(slotId)))) {
+    // First click on a matching cell selects the whole qualifying window
+    const win = POLL.windowStartingAt(ev, slotId) || POLL.matchWindows(ev).find(w => w.slotIds.includes(slotId));
+    sel.slotIds = win.slotIds.slice();
   } else {
     // Try to add — validate same day and consecutive
     const candidate = [...sel.slotIds, slotId];
@@ -3695,11 +3883,22 @@ window.POLL_clearSelection = function(eventId) {
   POLL_updateSelectionUI(eventId);
 };
 
+// Select an entire matching window (from the "matching windows" shortcut chips)
+window.POLL_selectWindow = function(eventId, startSlotId) {
+  const ev  = S.events.find(e => e.id === eventId);
+  if (!ev) return;
+  const win = POLL.windowStartingAt(ev, startSlotId);
+  if (!win) return;
+  window._pollSelected = { eventId, slotIds: win.slotIds.slice() };
+  POLL_updateSelectionUI(eventId);
+  document.getElementById('poll-sel-bar')?.scrollIntoView({ behavior:'smooth', block:'center' });
+};
+
 window.POLL_updateSelectionUI = function(eventId) {
   const ev = S.events.find(e => e.id === eventId);
   if (!ev) return;
   const sel     = window._pollSelected;
-  const matches = new Set(POLL.matchSlots(ev).map(s => s.id));
+  const matches = POLL.matchSlotIds(ev);
 
   // Update every admin cell's visual state
   ev.proposedSlots.forEach(slot => {
@@ -3711,9 +3910,9 @@ window.POLL_updateSelectionUI = function(eventId) {
       btn.style.border     = '2px solid #2563EB';
       btn.style.filter     = '';
     } else {
-      const s = POLL.slotSummary(ev, slot.id);
-      btn.style.background = s.responded === 0 ? '#F9FAFB' : s.available === 0 ? '#FEE2E2' : matches.has(slot.id) ? '#DCFCE7' : '#FEF3C7';
-      btn.style.border     = matches.has(slot.id) ? '2px solid #16A34A' : '1px solid #E5E7EB';
+      const cv = POLL.cellVisual(ev, slot, matches);
+      btn.style.background = cv.bg;
+      btn.style.border     = cv.bdr;
       btn.style.filter     = '';
     }
   });
@@ -3722,6 +3921,7 @@ window.POLL_updateSelectionUI = function(eventId) {
   const bar   = document.getElementById('poll-sel-bar');
   const label = document.getElementById('poll-sel-label');
   const time  = document.getElementById('poll-sel-time');
+  const note  = document.getElementById('poll-sel-note');
   if (!bar) return;
 
   if (sel.slotIds.length === 0) {
@@ -3737,9 +3937,21 @@ window.POLL_updateSelectionUI = function(eventId) {
   const last  = sorted[sorted.length - 1];
   const fmtDt = new Date(first.date + 'T12:00:00').toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric'});
 
+  const required = POLL.duration(ev);
+  const selected = sorted.length * POLL.SLOT_MINUTES;
+
   bar.style.display = 'flex';
   if (label) label.textContent = `${sel.slotIds.length} slot${sel.slotIds.length > 1 ? 's' : ''} selected · ${fmtDt}`;
   if (time)  time.textContent  = `${POLL.fmtTime(first.startTime)} – ${POLL.fmtTime(last.endTime)}`;
+  if (note) {
+    if (selected < required) {
+      note.textContent = `${POLL.fmtDuration(selected)} selected — ${POLL.fmtDuration(required)} required. Add ${(required - selected) / POLL.SLOT_MINUTES} more block(s).`;
+      note.style.color = '#FCD34D';
+    } else {
+      note.textContent = `${POLL.fmtDuration(selected)} selected · meets the ${POLL.fmtDuration(required)} requirement`;
+      note.style.color = 'rgba(255,255,255,.65)';
+    }
+  }
 };
 
 window.POLL_scheduleSelected = function(eventId) {
@@ -3780,6 +3992,14 @@ window.POLL_scheduleSelected = function(eventId) {
       <strong>Note:</strong> ${unavailable.length} participant(s) marked as unavailable during part or all of this window.
     </div>` : '';
 
+  const required     = POLL.duration(ev);
+  const selectedMins = sorted.length * POLL.SLOT_MINUTES;
+  const shortWarning = selectedMins < required ? `
+    <div style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:8px;padding:10px 14px;margin:12px 0;font-size:.8rem;color:#92400E;">
+      <strong>Shorter than requested:</strong> this window is ${POLL.fmtDuration(selectedMins)}, but the meeting was set up as ${POLL.fmtDuration(required)}.
+      Select ${(required - selectedMins) / POLL.SLOT_MINUTES} more consecutive block(s) for the full length, or schedule it short.
+    </div>` : '';
+
   modal.open(`
     <div class="modal-header" style="background:#0B1F3A;border-radius:18px 18px 0 0;">
       <h3 class="modal-title" style="color:#fff">Schedule Combined Slot</h3>
@@ -3789,9 +4009,10 @@ window.POLL_scheduleSelected = function(eventId) {
       <div style="background:#F6F1E9;border:1px solid #EDE6D9;border-radius:10px;padding:13px 16px;margin-bottom:16px;">
         <div style="font-size:.7rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#9e7e3f;margin-bottom:3px;">${fmtDt}</div>
         <div style="font-family:'Cormorant Garamond',serif;font-size:1.4rem;font-weight:600;color:#0B1F3A;">${timeRange}</div>
-        <div style="font-size:.72rem;color:#9CA3AF;margin-top:3px;">${sorted.length} consecutive half-hour slot${sorted.length > 1 ? 's' : ''}</div>
-        ${isMatch ? `<div style="margin-top:8px;display:inline-flex;align-items:center;gap:5px;background:#DCFCE7;border-radius:12px;padding:3px 10px;font-size:.7rem;font-weight:700;color:#166534;">✓ Everyone available for full window</div>` : ''}
+        <div style="font-size:.72rem;color:#9CA3AF;margin-top:3px;">${sorted.length} consecutive half-hour slot${sorted.length > 1 ? 's' : ''} · ${POLL.fmtDuration(sorted.length * POLL.SLOT_MINUTES)} of ${POLL.fmtDuration(POLL.duration(ev))} requested</div>
+        ${isMatch && sorted.length * POLL.SLOT_MINUTES >= POLL.duration(ev) ? `<div style="margin-top:8px;display:inline-flex;align-items:center;gap:5px;background:#DCFCE7;border-radius:12px;padding:3px 10px;font-size:.7rem;font-weight:700;color:#166534;">✓ Everyone available for the full ${POLL.fmtDuration(POLL.duration(ev))}</div>` : ''}
       </div>
+      ${shortWarning}
       ${warningHtml}
       ${available.length > 0 ? `<div style="margin-bottom:12px;"><div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#166534;">Available for full window (${available.length})</div>${nameList(available,'#F0FDF4','✓')}</div>` : ''}
       ${unavailable.length > 0 ? `<div style="margin-bottom:12px;"><div style="font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#B91C1C;">Not fully available (${unavailable.length})</div>${nameList(unavailable,'#FEF2F2','✗')}</div>` : ''}
@@ -3821,6 +4042,18 @@ window.POLL_showSlotDetail = function(eventId, slotId) {
   const pending     = ev.participants.filter(p => p.status === 'pending');
   const isMatch     = available.length > 0 && unavailable.length === 0 && pending.length === 0;
   const canConfirm  = ev.status !== 'confirmed' && ev.status !== 'archived';
+  const duration    = POLL.duration(ev);
+  const durLabel    = POLL.fmtDuration(duration);
+  const window_     = duration > POLL.SLOT_MINUTES
+    ? (POLL.windowStartingAt(ev, slotId) || POLL.matchWindows(ev).find(w => w.slotIds.includes(slotId)) || null)
+    : null;
+  const durNote = duration <= POLL.SLOT_MINUTES ? '' : (window_
+    ? `<div style="background:#F0FDF4;border:1px solid #86EFAC;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:.8rem;color:#166534;">
+         This block is part of a full <strong>${durLabel}</strong> window (${POLL.fmtTime(window_.startTime)} – ${POLL.fmtTime(window_.endTime)}) where everyone who has responded is free.
+       </div>`
+    : `<div style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:.8rem;color:#92400E;">
+         This meeting needs <strong>${durLabel}</strong>. This half-hour block is not part of a ${durLabel} window that works for everyone — scheduling it alone books only 30 minutes.
+       </div>`);
 
   const nameList = (people, bg, dot) => people.length === 0 ? '' : `
     <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">
@@ -3832,10 +4065,16 @@ window.POLL_showSlotDetail = function(eventId, slotId) {
         </div>`).join('')}
     </div>`;
 
+  const windowBtn = canConfirm && window_ ? `
+    <button onclick="closeModal();POLL_selectWindow('${eventId}','${window_.slotIds[0]}');POLL_scheduleSelected('${eventId}')"
+      style="padding:9px 22px;border:none;border-radius:8px;background:#166534;color:#fff;font-size:.82rem;font-weight:700;cursor:pointer;font-family:'Montserrat',sans-serif;letter-spacing:.04em;">
+      Schedule ${POLL.fmtTime(window_.startTime)} – ${POLL.fmtTime(window_.endTime)}
+    </button>` : '';
+
   const confirmBtn = canConfirm ? `
     <button onclick="closeModal();POLL_confirmSlot('${eventId}','${slotId}')"
-      style="padding:9px 22px;border:none;border-radius:8px;background:#0B1F3A;color:#C09D5F;font-size:.82rem;font-weight:700;cursor:pointer;font-family:'Montserrat',sans-serif;letter-spacing:.04em;">
-      Schedule This Time
+      style="padding:9px 22px;border:${window_?'1px solid #D1D5DB':'none'};border-radius:8px;background:${window_?'#fff':'#0B1F3A'};color:${window_?'#6B7280':'#C09D5F'};font-size:.82rem;font-weight:700;cursor:pointer;font-family:'Montserrat',sans-serif;letter-spacing:.04em;">
+      ${duration > POLL.SLOT_MINUTES ? 'Schedule 30 min only' : 'Schedule This Time'}
     </button>` : '';
 
   modal.open(`
@@ -3849,6 +4088,7 @@ window.POLL_showSlotDetail = function(eventId, slotId) {
         <div style="font-family:'Cormorant Garamond',serif;font-size:1.35rem;font-weight:600;color:#0B1F3A;">${fmtRange}</div>
         ${isMatch ? `<div style="margin-top:6px;display:inline-flex;align-items:center;gap:5px;background:#DCFCE7;border-radius:12px;padding:3px 10px;font-size:.7rem;font-weight:700;color:#166534;letter-spacing:.03em;">✓ Everyone available</div>` : ''}
       </div>
+      ${durNote}
 
       ${available.length > 0 ? `
         <div style="margin-bottom:14px;">
@@ -3868,9 +4108,10 @@ window.POLL_showSlotDetail = function(eventId, slotId) {
           ${nameList(pending, '#F9FAFB', '·')}
         </div>` : ''}
 
-      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:6px;padding-top:16px;border-top:1px solid #EDE6D9;">
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:6px;padding-top:16px;border-top:1px solid #EDE6D9;flex-wrap:wrap;">
         <button onclick="closeModal()" style="padding:9px 20px;border:1px solid #D1D5DB;border-radius:8px;background:#fff;color:#6B7280;font-size:.82rem;font-weight:600;cursor:pointer;font-family:'Montserrat',sans-serif;">Close</button>
         ${confirmBtn}
+        ${windowBtn}
       </div>
     </div>`);
 };
@@ -3881,17 +4122,21 @@ window.POLL_confirmSlot = function(eventId, slotId) {
   if (!ev) return;
   const slot = ev.proposedSlots.find(s => s.id === slotId);
   if (!slot) return;
-  const matches = POLL.matchSlots(ev);
-  const isMatch = matches.some(s => s.id === slotId);
   const responded = ev.participants.filter(p => p.status !== 'pending');
   const summary   = POLL.slotSummary(ev, slotId);
   const fmtBlk = `${POLL.fmtTime(slot.startTime)} – ${POLL.fmtTime(slot.endTime)}`;
   const fmtDt  = new Date(slot.date + 'T12:00:00').toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' });
-  const hasNonMatching = responded.length > 0 && !isMatch;
+  const hasNonMatching = responded.length > 0 && summary.available < summary.responded;
   const warningHtml = hasNonMatching ? `
     <div style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:8px;padding:12px 14px;margin:14px 0;font-size:.82rem;color:#92400E;">
       <strong>Note:</strong> ${summary.responded - summary.available} of ${summary.responded} responded participant(s) marked this slot as unavailable.
       Confirming will schedule this time regardless.
+    </div>` : '';
+  const duration = POLL.duration(ev);
+  const durationWarning = duration > POLL.SLOT_MINUTES ? `
+    <div style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:8px;padding:12px 14px;margin:14px 0;font-size:.82rem;color:#92400E;">
+      <strong>Length:</strong> this books ${POLL.fmtDuration(POLL.SLOT_MINUTES)} only, but the meeting was set up as ${POLL.fmtDuration(duration)}.
+      To book the full length, select consecutive blocks in the grid and use <em>Schedule</em>.
     </div>` : '';
   modal.open(`
     <div class="modal-header" style="background:#0B1F3A;border-radius:18px 18px 0 0;">
@@ -3905,6 +4150,7 @@ window.POLL_confirmSlot = function(eventId, slotId) {
         <div style="font-size:.85rem;color:#6B5D4F;margin-top:4px;">${fmtDt} &mdash; ${fmtBlk}</div>
         ${ev.caseNumber ? `<div style="font-size:.75rem;color:#9CA3AF;margin-top:2px;">Case ${esc(ev.caseNumber)}</div>` : ''}
       </div>
+      ${durationWarning}
       ${warningHtml}
       <p style="font-size:.8rem;color:#6B7280;margin:12px 0 20px;">Confirmation emails with calendar invites will be sent to all participants.</p>
       <div style="display:flex;gap:10px;justify-content:flex-end;">
