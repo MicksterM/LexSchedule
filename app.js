@@ -502,10 +502,7 @@ const EMAIL = {
       const dates  = POLL.uniqueDates(ev.proposedSlots);
       const start  = fmtDate(dates[0]);
       const end    = fmtDate(dates[dates.length - 1]);
-      const blocks = [...new Set(ev.proposedSlots.map(s => s.block))];
-      const label  = blocks.length === 2 ? 'Morning &amp; Afternoon'
-        : blocks[0] === 'AM' ? 'Morning (9:00 AM – 12:00 PM)'
-        : 'Afternoon (12:00 PM – 6:00 PM)';
+      const label  = POLL.blocksLabel(POLL.usedBlocks(ev), '&amp;');
       const durLabel = POLL.fmtDuration(POLL.duration(ev));
       return `<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #EDE6D9;border-radius:6px;background:#ffffff;"><tr><td style="padding:10px 14px;font-size:13px;color:#374151;">Please indicate your availability between <strong>${start}</strong> and <strong>${end}</strong> (${label}).<br><br>This meeting is expected to take <strong>${durLabel}</strong>. You will mark 30-minute blocks &mdash; consecutive blocks are combined, so please mark every block you are free.</td></tr></table>`;
     }
@@ -688,10 +685,7 @@ const EMAIL = {
       invitation: (() => {
         const isPoll = ev.mode === 'poll';
         const pollDates = isPoll ? POLL.uniqueDates(ev.proposedSlots) : [];
-        const pollBlocks = isPoll ? [...new Set(ev.proposedSlots.map(s => s.block))] : [];
-        const pollBlockLabel = pollBlocks.length === 2 ? 'Morning &amp; Afternoon'
-          : pollBlocks[0] === 'AM' ? 'Morning (9:00 AM – 12:00 PM)'
-          : 'Afternoon (12:00 PM – 6:00 PM)';
+        const pollBlockLabel = isPoll ? POLL.blocksLabel(POLL.usedBlocks(ev), '&amp;') : '';
         const pollDateRange = isPoll
           ? `${fmtDate(pollDates[0])} – ${fmtDate(pollDates[pollDates.length - 1])}`
           : '';
@@ -870,6 +864,19 @@ const POLL = {
 
   uniqueDates(slots) {
     return [...new Set(slots.map(s => s.date))].sort();
+  },
+
+  // Human label for a set of block ids, e.g. ['AM','PM'] → "Morning & Afternoon"
+  blocksLabel(blockIds, amp = '&') {
+    const ids = blockIds && blockIds.length ? blockIds : POLL.BLOCKS.map(b => b.id);
+    const parts = POLL.BLOCKS.filter(b => ids.includes(b.id))
+      .map(b => `${b.label} (${b.short.replace('9a','9:00 AM').replace('12p','12:00 PM').replace('6p','6:00 PM').replace('–',' – ')})`);
+    return parts.length ? parts.join(` ${amp} `) : '—';
+  },
+
+  // Block ids actually represented in an event's slots
+  usedBlocks(ev) {
+    return POLL.BLOCKS.map(b => b.id).filter(id => (ev.proposedSlots||[]).some(s => s.block === id));
   },
 
   // Map: date → startTime → slot
@@ -2131,11 +2138,14 @@ const VIEWS = {
       <div style="margin-bottom:20px;">
         <label style="display:block;font-size:.72rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#0B1F3A;margin-bottom:10px;">Time Blocks to Include</label>
         <div style="display:flex;gap:12px;">
-          ${POLL.BLOCKS.map(blk => `
-            <label style="display:flex;align-items:center;gap:10px;padding:12px 18px;border:1.5px solid #D5CCBA;border-radius:8px;cursor:pointer;background:#fff;flex:1;">
-              <input type="checkbox" name="poll-block" value="${blk.id}" checked style="accent-color:#0B1F3A;width:15px;height:15px;">
+          ${POLL.BLOCKS.map(blk => {
+            const on = !cd.pollBlocks || cd.pollBlocks.includes(blk.id);
+            return `
+            <label id="pb-lbl-${blk.id}" style="display:flex;align-items:center;gap:10px;padding:12px 18px;border:1.5px solid ${on?'#0B1F3A':'#D5CCBA'};border-radius:8px;cursor:pointer;background:${on?'#EBF0F7':'#fff'};opacity:${on?'1':'.55'};flex:1;">
+              <input type="checkbox" name="poll-block" value="${blk.id}" ${on?'checked':''} onchange="POLL_syncBlockCard(this,'pb-lbl-${blk.id}')" style="accent-color:#0B1F3A;width:15px;height:15px;">
               <span><div style="font-size:.84rem;font-weight:600;color:#0B1F3A;">${blk.label}</div><div style="font-size:.72rem;color:#9CA3AF;">${blk.short.replace('9a','9:00 AM').replace('12p','12:00 PM').replace('6p','6:00 PM').replace('–',' – ')}</div></span>
-            </label>`).join('')}
+            </label>`;
+          }).join('')}
         </div>
       </div>
       <label style="display:flex;align-items:center;gap:10px;font-size:.84rem;color:#4B5563;cursor:pointer;margin-bottom:8px;">
@@ -2159,6 +2169,7 @@ const VIEWS = {
           <div style="font-size:.82rem;color:#0B1F3A;margin-bottom:4px;"><strong>From:</strong> ${fmtDateShort(cd.pollRange.startDate)}</div>
           <div style="font-size:.82rem;color:#0B1F3A;margin-bottom:4px;"><strong>To:</strong> ${fmtDateShort(cd.pollRange.endDate)}</div>
           <div style="font-size:.82rem;color:#0B1F3A;margin-bottom:4px;"><strong>Days:</strong> ${cd.pollWeekdaysOnly===false?'All days':'Weekdays only'}</div>
+          <div style="font-size:.82rem;color:#0B1F3A;margin-bottom:4px;"><strong>Time Blocks:</strong> ${POLL.blocksLabel(cd.pollBlocks)} &middot; <a onclick="S.createStep=3;VIEWS.createEvent()" style="color:#1A4A7A;text-decoration:underline;cursor:pointer;">change</a></div>
           <div style="font-size:.82rem;color:#0B1F3A;"><strong>Meeting Duration:</strong> ${POLL.fmtDuration(cd.durationMinutes || 60)}</div>
           <div style="margin-top:10px;font-size:.78rem;color:#6B7280;">Participants will receive a grid of 30-minute time slots for each day. They click the blocks when they're free, and the system combines consecutive blocks to find a mutual ${POLL.fmtDuration(cd.durationMinutes || 60)} window.</div>
         </div>`
@@ -2354,8 +2365,8 @@ const VIEWS = {
               <label style="display:block;font-size:.72rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#0B1F3A;margin-bottom:10px;">Time Blocks to Include</label>
               <div style="display:flex;gap:12px;">
                 ${POLL.BLOCKS.map(blk => `
-                <label style="display:flex;align-items:center;gap:10px;padding:12px 18px;border:1.5px solid #D5CCBA;border-radius:8px;cursor:pointer;background:#fff;flex:1;">
-                  <input type="checkbox" name="draft-poll-block" value="${blk.id}" checked style="accent-color:#0B1F3A;width:15px;height:15px;">
+                <label id="dpb-lbl-${blk.id}" style="display:flex;align-items:center;gap:10px;padding:12px 18px;border:1.5px solid #0B1F3A;border-radius:8px;cursor:pointer;background:#EBF0F7;flex:1;">
+                  <input type="checkbox" name="draft-poll-block" value="${blk.id}" checked onchange="POLL_syncBlockCard(this,'dpb-lbl-${blk.id}')" style="accent-color:#0B1F3A;width:15px;height:15px;">
                   <span><div style="font-size:.84rem;font-weight:600;color:#0B1F3A;">${blk.label}</div><div style="font-size:.72rem;color:#9CA3AF;">${blk.short.replace('9a','9:00 AM').replace('12p','12:00 PM').replace('6p','6:00 PM').replace('–',' – ')}</div></span>
                 </label>`).join('')}
               </div>
@@ -2433,6 +2444,17 @@ const VIEWS = {
             <span>⚠️</span><span>No ${durLbl} window works for everyone who has responded so far. Shorter overlaps are shown with a dashed green border.</span>
           </div>` : '')}`;
           })() : ''}
+          ${(() => {
+            const used = POLL.usedBlocks(ev);
+            const missing = POLL.BLOCKS.filter(b => !used.includes(b.id));
+            if (!used.length || !missing.length || ev.status === 'confirmed' || !ev.pollRange) return '';
+            return `
+          <div style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:10px;padding:12px 16px;margin-bottom:14px;font-size:.82rem;color:#92400E;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <span>🕘</span>
+            <span style="flex:1;min-width:220px;">This poll only covers <strong>${POLL.blocksLabel(used)}</strong>. ${missing.map(b => b.label).join(' and ')} was not included when the invitations were sent.</span>
+            ${missing.map(b => `<button onclick="POLL_addBlockModal('${ev.id}','${b.id}')" style="padding:7px 14px;border:none;border-radius:7px;background:#92400E;color:#fff;font-size:.74rem;font-weight:700;cursor:pointer;font-family:'Montserrat',sans-serif;white-space:nowrap;">+ Add ${b.label}</button>`).join('')}
+          </div>`;
+          })()}
           ${POLL.renderGrid(ev, { isAdmin: true })}
           ${ev.status === 'active' || ev.status === 'no-match' ? `
           <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
@@ -4182,6 +4204,67 @@ window.POLL_setNoMatch = function(eventId) {
         <button onclick="POLL_doNoMatch('${eventId}')" style="padding:9px 22px;border:none;border-radius:8px;background:#8B1C2E;color:#fff;font-size:.82rem;font-weight:700;cursor:pointer;font-family:'Montserrat',sans-serif;">Mark No Match</button>
       </div>
     </div>`);
+};
+
+// Highlight a "time block to include" card so its checked state is obvious
+window.POLL_syncBlockCard = function(input, labelId) {
+  const el = document.getElementById(labelId);
+  if (!el) return;
+  el.style.borderColor = input.checked ? '#0B1F3A' : '#D5CCBA';
+  el.style.background  = input.checked ? '#EBF0F7' : '#fff';
+  el.style.opacity     = input.checked ? '1' : '.55';
+};
+
+// Add a time block (e.g. Morning) that was left out when the poll was sent,
+// without discarding the responses already collected.
+window.POLL_addBlockModal = function(eventId, blockId) {
+  const ev  = S.events.find(e => e.id === eventId);
+  const blk = POLL.BLOCKS.find(b => b.id === blockId);
+  if (!ev || !blk) return;
+  const responded = ev.participants.filter(p => p.status !== 'pending');
+  modal.open(`
+    <div class="modal-header" style="background:#0B1F3A;border-radius:18px 18px 0 0;">
+      <h3 class="modal-title" style="color:#fff">Add ${blk.label} to This Poll</h3>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div style="padding:24px 28px;">
+      <p style="font-size:.88rem;color:#374151;margin:0 0 14px;">${blk.label} slots (${blk.short.replace('9a','9:00 AM').replace('12p','12:00 PM').replace('6p','6:00 PM').replace('–',' – ')}) will be added to every date in this poll's range. Existing responses are kept.</p>
+      ${responded.length ? `
+      <p style="font-size:.82rem;color:#6B7280;margin:0 0 18px;"><strong>${responded.length} participant(s) have already responded.</strong> They did not see these slots, so they will count as unavailable unless you re-open their responses and send a new invitation.</p>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <button onclick="POLL_addBlock('${eventId}','${blk.id}',true)" style="padding:11px 22px;border:none;border-radius:8px;background:#0B1F3A;color:#fff;font-size:.82rem;font-weight:700;cursor:pointer;font-family:'Montserrat',sans-serif;">Add slots &amp; ask everyone to respond again</button>
+        <button onclick="POLL_addBlock('${eventId}','${blk.id}',false)" style="padding:11px 22px;border:1px solid #D1D5DB;border-radius:8px;background:#fff;color:#374151;font-size:.82rem;font-weight:600;cursor:pointer;font-family:'Montserrat',sans-serif;">Just add the slots (keep responses as-is)</button>
+        <button onclick="closeModal()" style="padding:9px 20px;border:none;border-radius:8px;background:transparent;color:#9CA3AF;font-size:.8rem;font-weight:600;cursor:pointer;font-family:'Montserrat',sans-serif;">Cancel</button>
+      </div>` : `
+      <div style="display:flex;gap:10px;justify-content:flex-end;">
+        <button onclick="closeModal()" style="padding:9px 20px;border:1px solid #D1D5DB;border-radius:8px;background:#fff;color:#6B7280;font-size:.82rem;font-weight:600;cursor:pointer;font-family:'Montserrat',sans-serif;">Cancel</button>
+        <button onclick="POLL_addBlock('${eventId}','${blk.id}',false)" style="padding:9px 22px;border:none;border-radius:8px;background:#0B1F3A;color:#fff;font-size:.82rem;font-weight:700;cursor:pointer;font-family:'Montserrat',sans-serif;">Add ${blk.label} Slots</button>
+      </div>`}
+    </div>`);
+};
+
+window.POLL_addBlock = function(eventId, blockId, reopen) {
+  const ev  = S.events.find(e => e.id === eventId);
+  const blk = POLL.BLOCKS.find(b => b.id === blockId);
+  if (!ev || !blk) return;
+  if (!ev.pollRange?.startDate || !ev.pollRange?.endDate) {
+    toast('This poll has no saved date range, so slots cannot be added automatically.', 'error'); return;
+  }
+  const existing = new Set(ev.proposedSlots.map(s => s.id));
+  const added = POLL.slotsFromRange(ev.pollRange.startDate, ev.pollRange.endDate,
+                                    ev.pollWeekdaysOnly !== false, [blockId])
+    .filter(s => !existing.has(s.id));
+  if (!added.length) { toast('Those slots are already part of this poll.', 'error'); return; }
+  ev.proposedSlots = ev.proposedSlots.concat(added)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.startTime.localeCompare(b.startTime));
+  if (reopen) ev.participants.forEach(p => { p.status = 'pending'; });
+  if (ev.status === 'no-match') ev.status = 'active';
+  EMAIL.addHistory(eventId, `${blk.label} slots added to the poll (${added.length} new half-hour blocks)${reopen ? ' — responses re-opened' : ''}`);
+  STORE.save();
+  if (reopen) { EMAIL.sendInvitations(eventId); STORE.save(); }
+  modal.close();
+  toast(`${blk.label} slots added.${reopen ? ' New invitations sent.' : ''}`, 'success', 5000);
+  VIEWS.eventDetail(eventId);
 };
 
 window.POLL_doNoMatch = function(eventId) {
