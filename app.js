@@ -8,6 +8,10 @@ const uid = () => typeof crypto !== 'undefined' && crypto.randomUUID
   ? crypto.randomUUID()
   : Math.random().toString(36).slice(2) + Date.now().toString(36);
 
+// Date object → 'YYYY-MM-DD' in local time (toISOString would shift the day)
+const fmtLocalDate = dt =>
+  `${dt.getFullYear()}-${String(dt.getMonth()+1).padStart(2,'0')}-${String(dt.getDate()).padStart(2,'0')}`;
+
 const fmtDate = d => {
   if (!d) return '';
   const dt = new Date(d + 'T12:00:00');
@@ -841,23 +845,29 @@ const POLL = {
 
   // Generate one slot per half-hour per date for the selected blocks
   slotsFromRange(startDate, endDate, weekdaysOnly=true, blocks=['AM','PM']) {
-    const slots = [];
+    const dates = [];
     const d   = new Date(startDate + 'T12:00:00');
     const end = new Date(endDate   + 'T12:00:00');
     while (d <= end) {
       const dow = d.getDay();
-      if (!weekdaysOnly || (dow >= 1 && dow <= 5)) {
-        const ds = d.toISOString().slice(0,10);
-        for (const blk of POLL.BLOCKS.filter(b => blocks.includes(b.id))) {
-          for (const time of POLL.halfHours(blk)) {
-            const [th, tm] = time.split(':').map(Number);
-            const endMins = th * 60 + tm + 30;
-            const endTime = `${String(Math.floor(endMins/60)).padStart(2,'0')}:${String(endMins%60).padStart(2,'0')}`;
-            slots.push({ id:`poll-${ds}-${time.replace(':','')}`, date:ds, block:blk.id, startTime:time, endTime });
-          }
+      if (!weekdaysOnly || (dow >= 1 && dow <= 5)) dates.push(fmtLocalDate(d));
+      d.setDate(d.getDate() + 1);
+    }
+    return POLL.slotsForDates(dates, blocks);
+  },
+
+  // One slot per half-hour, for each given date and each requested block
+  slotsForDates(dates, blocks=['AM','PM']) {
+    const slots = [];
+    for (const ds of dates) {
+      for (const blk of POLL.BLOCKS.filter(b => blocks.includes(b.id))) {
+        for (const time of POLL.halfHours(blk)) {
+          const [th, tm] = time.split(':').map(Number);
+          const endMins = th * 60 + tm + 30;
+          const endTime = `${String(Math.floor(endMins/60)).padStart(2,'0')}:${String(endMins%60).padStart(2,'0')}`;
+          slots.push({ id:`poll-${ds}-${time.replace(':','')}`, date:ds, block:blk.id, startTime:time, endTime });
         }
       }
-      d.setDate(d.getDate() + 1);
     }
     return slots;
   },
@@ -2447,7 +2457,7 @@ const VIEWS = {
           ${(() => {
             const used = POLL.usedBlocks(ev);
             const missing = POLL.BLOCKS.filter(b => !used.includes(b.id));
-            if (!used.length || !missing.length || ev.status === 'confirmed' || !ev.pollRange) return '';
+            if (!used.length || !missing.length || ev.status === 'confirmed') return '';
             return `
           <div style="background:#FEF3C7;border:1px solid #F59E0B;border-radius:10px;padding:12px 16px;margin-bottom:14px;font-size:.82rem;color:#92400E;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
             <span>🕘</span>
@@ -4247,12 +4257,10 @@ window.POLL_addBlock = function(eventId, blockId, reopen) {
   const ev  = S.events.find(e => e.id === eventId);
   const blk = POLL.BLOCKS.find(b => b.id === blockId);
   if (!ev || !blk) return;
-  if (!ev.pollRange?.startDate || !ev.pollRange?.endDate) {
-    toast('This poll has no saved date range, so slots cannot be added automatically.', 'error'); return;
-  }
+  // Use the dates already in the poll rather than pollRange — the columns then
+  // line up exactly with the grid the participants have been answering.
   const existing = new Set(ev.proposedSlots.map(s => s.id));
-  const added = POLL.slotsFromRange(ev.pollRange.startDate, ev.pollRange.endDate,
-                                    ev.pollWeekdaysOnly !== false, [blockId])
+  const added = POLL.slotsForDates(POLL.uniqueDates(ev.proposedSlots), [blockId])
     .filter(s => !existing.has(s.id));
   if (!added.length) { toast('Those slots are already part of this poll.', 'error'); return; }
   ev.proposedSlots = ev.proposedSlots.concat(added)
