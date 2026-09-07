@@ -467,6 +467,53 @@ window.EJS_saveConfig = function() {
   modal.close();
 };
 
+// Send a real test email through the exact same path as a live invitation,
+// and report precisely what the email service said.
+window.EJS_sendTest = async function() {
+  const to  = (document.getElementById('ejs_testTo')||{}).value?.trim() || '';
+  const box = document.getElementById('ejs_testResult');
+  const show = (bg, border, color, html) => {
+    if (!box) return;
+    box.style.display = 'block';
+    box.style.background = bg; box.style.borderLeft = `3px solid ${border}`; box.style.color = color;
+    box.innerHTML = html;
+  };
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) {
+    show('#FBE9EC', '#8B1C2E', '#7F1D1D', 'Enter a valid email address to send the test to.');
+    return;
+  }
+  const cfg = (() => { try { return JSON.parse(localStorage.getItem('ejs_config')||'{}'); } catch(e){return{};} })();
+  const templateId = cfg.templateInvitation;
+  show('#EBF0F7', '#0B1F3A', '#374151', 'Sending test email…');
+
+  const res = await EMAIL._send(templateId, {
+    to_email:       to,
+    to_name:        S.user?.name || 'Test Recipient',
+    subject:        'LexSchedule test email',
+    matter_name:    'Test Matter — please ignore',
+    case_number:    'TEST-0000',
+    event_type:     'Test',
+    deadline:       'N/A',
+    meeting_duration: '',
+    proposed_slots: '<p>This is a test of your LexSchedule email configuration.</p>',
+    respond_url:    window.location.href.split('#')[0],
+    firm_name:      S.user?.firm || 'LexSchedule',
+    firm_address:   S.user?.firmAddress || '',
+    firm_fax:       S.user?.firmFax || '',
+    sender_name:    S.user?.name || 'LexSchedule',
+    sender_phone:   '',
+  }, S.user?.name || 'Test Recipient', to);
+
+  if (res.ok) {
+    show('#E7F4EC', '#276749', '#276749',
+      `<strong>Your email service accepted the message.</strong> Check ${esc(to)} — including its spam folder.
+       If it never arrives, the problem is downstream of EmailJS (spam filtering or your mail provider), not this app.`);
+  } else {
+    show('#FBE9EC', '#8B1C2E', '#7F1D1D',
+      `<strong>Test failed — nothing was sent.</strong><br>${esc(res.error)}`);
+  }
+};
+
 // Initialize EmailJS on load if already configured
 (function initEmailJS() {
   if (typeof emailjs !== 'undefined') {
@@ -476,28 +523,114 @@ window.EJS_saveConfig = function() {
 })();
 
 /* ── Email ─────────────────────────────────────────────── */
+const EMAIL_TYPE_LABEL = {
+  invitation:   'Invitation',
+  reminder:     'Reminder',
+  confirmation: 'Confirmation',
+  'no-match':   'No-match notice',
+  waitlist:     'Waitlist notification',
+};
+
 const EMAIL = {
-  log(eventId, to, subject, type) {
+  // Record one delivery attempt with its true outcome.
+  // `result` comes from EMAIL._send; a missing result is treated as unverified.
+  log(eventId, to, subject, type, result) {
     const ev = S.events.find(e=>e.id===eventId);
     if (!ev) return;
-    ev.emailLog.push({ ts: Date.now(), to, subject, type });
+    ev.emailLog = ev.emailLog || [];
+    const r = result || {};
+    ev.emailLog.push({
+      ts:      Date.now(),
+      to, subject, type,
+      status:  r.status || 'unknown',
+      ok:      r.ok === true,
+      error:   r.error || '',
+    });
     STORE.save();
   },
 
-  // Internal: send one email via EmailJS or fall back to simulation
+  // Turn an EmailJS rejection into something a non-developer can act on.
+  _errText(err) {
+    if (!err) return 'Unknown error';
+    const t = (err.text || err.message || (typeof err === 'string' ? err : '') || '').trim();
+    switch (err.status) {
+      case 400: return `${t||'Bad request'} — check the Template ID and that the template defines every variable it uses`;
+      case 401:
+      case 403: return `${t||'Not authorized'} — check your Public Key, and that EmailJS API access is enabled and this domain is allowed`;
+      case 404: return `${t||'Not found'} — that Service ID or Template ID does not exist in your EmailJS account`;
+      case 412: return `${t||'Email service rejected the send'} — your Gmail/Outlook connection in EmailJS likely needs to be re-authorized`;
+      case 418:
+      case 429: return `${t||'Rate limited'} — your EmailJS monthly quota or send rate has been reached`;
+      default:  return t || (err.status ? `Error ${err.status}` : 'Unknown error');
+    }
+  },
+
+  // Which credentials are missing, if any.
+  _missingConfig(templateId) {
+    const cfg = (() => { try { return JSON.parse(localStorage.getItem('ejs_config')||'{}'); } catch(e){return{};} })();
+    const missing = [];
+    if (!cfg.publicKey) missing.push('Public Key');
+    if (!cfg.serviceId) missing.push('Service ID');
+    if (!templateId)    missing.push('Template ID');
+    return missing;
+  },
+
+  // Internal: send one email via EmailJS.
+  // Always resolves to { ok, status, error } — never silently claims success.
   _send(templateId, params, recipientName, recipientEmail) {
     const cfg = (() => { try { return JSON.parse(localStorage.getItem('ejs_config')||'{}'); } catch(e){return{};} })();
-    const ready = cfg.publicKey && cfg.serviceId && templateId;
-    if (!ready || typeof emailjs === 'undefined') {
-      // Simulation mode — no credentials configured yet
-      console.log('[EMAIL SIM]', params.subject, '->', recipientEmail);
-      return Promise.resolve({ status: 'simulated' });
+    if (typeof emailjs === 'undefined') {
+      return Promise.resolve({ ok:false, status:'blocked',
+        error:'The EmailJS library did not load — a network block or ad blocker is preventing all sending' });
+    }
+    const missing = EMAIL._missingConfig(templateId);
+    if (missing.length) {
+      return Promise.resolve({ ok:false, status:'not_configured',
+        error:`Email service is not set up in this browser — missing ${missing.join(', ')}` });
     }
     return emailjs.send(cfg.serviceId, templateId, params)
+      .then(res => ({ ok:true, status:'sent', code: res && res.status }))
       .catch(err => {
-        console.error('[EmailJS error]', err);
-        toast(`Email delivery error for ${recipientName}: ${err.text||err.message||'Unknown error'}`, 'error', 6000);
+        console.error('[EmailJS error]', recipientEmail, err);
+        return { ok:false, status:'failed', error: EMAIL._errText(err) };
       });
+  },
+
+  // Send one email, record the real outcome, and tell the user the truth.
+  async _deliver(eventId, templateId, params, name, email, type, subject) {
+    const res   = await EMAIL._send(templateId, params, name, email);
+    const label = EMAIL_TYPE_LABEL[type] || 'Email';
+    EMAIL.log(eventId, email, subject, type, res);
+    if (res.ok) {
+      toast(`${label} sent to ${name} (${email})`, 'email', 4000);
+    } else {
+      toast(`NOT DELIVERED — ${label} to ${name} (${email}): ${res.error}`, 'error', 14000);
+      EMAIL.addHistory(eventId, `⚠️ ${label} to ${name} <${email}> FAILED — ${res.error}`);
+    }
+    EMAIL._refresh(eventId);
+    return res;
+  },
+
+  // Summarise a batch in the activity log so failures are never buried.
+  _summarise(eventId, results, label) {
+    const sent   = results.filter(r => r.ok).length;
+    const failed = results.length - sent;
+    if (failed === 0) {
+      EMAIL.addHistory(eventId, `${label} sent to ${sent} recipient(s) — all delivered`);
+    } else {
+      EMAIL.addHistory(eventId, `${label}: ${sent} delivered, ${failed} FAILED — see Email Delivery panel`);
+      toast(`${failed} of ${results.length} ${label.toLowerCase()} could not be delivered. Open the event's Email Delivery panel for details.`, 'error', 15000);
+    }
+    EMAIL._refresh(eventId);
+  },
+
+  // Re-render the event detail if the user is looking at this event.
+  _refresh(eventId) {
+    try {
+      if ((window.location.hash || '') === `#/event/${eventId}` && VIEWS && VIEWS.eventDetail) {
+        VIEWS.eventDetail(eventId);
+      }
+    } catch (e) { /* rendering is best-effort */ }
   },
 
   // Build HTML for proposed slots — card rows with date left, time right
@@ -537,40 +670,42 @@ const EMAIL = {
     return `${dir}respond.html?t=${token}&e=${eventId}&f=${firmId}`;
   },
 
-  sendInvitations(eventId) {
+  // Send the invitation to one participant. Used for the initial blast,
+  // for late additions, and for retrying a single failed delivery.
+  sendInvitationTo(eventId, participant) {
     const ev = S.events.find(e=>e.id===eventId);
-    if (!ev) return;
+    if (!ev || !participant) return Promise.resolve({ ok:false, status:'failed', error:'Event or participant not found' });
     const cfg = (() => { try { return JSON.parse(localStorage.getItem('ejs_config')||'{}'); } catch(e){return{};} })();
     const et = EVENT_TYPES[ev.type] || {};
     const deadline = ev.deadline ? fmtDate(new Date(ev.deadline).toISOString().slice(0,10)) : 'As soon as possible';
-    const slotsText = EMAIL._slotsHtml(ev);
-    ev.participants.forEach(p => {
-      const subj = `Scheduling Invitation: ${ev.matterName}`;
-      const respondUrl = EMAIL._respondUrl(p.token, ev.id);
-      EMAIL._send(cfg.templateInvitation, {
-        to_email:      p.email,
-        to_name:       p.name,
-        subject:       subj,
-        matter_name:   ev.matterName,
-        case_number:   ev.caseNumber || 'N/A',
-        event_type:    et.label || ev.type,
-        deadline:      deadline,
-        meeting_duration: ev.mode === 'poll' ? POLL.fmtDuration(POLL.duration(ev)) : '',
-        proposed_slots: slotsText,
-        respond_url:   respondUrl,
-        firm_name:     S.user?.firm || 'LexSchedule',
-        firm_address:  S.user?.firmAddress || '',
-        firm_fax:      S.user?.firmFax || '',
-        sender_name:   S.user?.name || 'LexSchedule',
-        sender_phone:  ev.schedulerPhone || '',
-      }, p.name, p.email);
-      EMAIL.log(eventId, p.email, subj, 'invitation');
-      toast(`Invitation sent to ${p.name} (${p.email})`, 'email', 5000);
-    });
-    EMAIL.addHistory(eventId, `Scheduling invitations sent to ${ev.participants.length} participant(s)`);
+    const subj = `Scheduling Invitation: ${ev.matterName}`;
+    return EMAIL._deliver(eventId, cfg.templateInvitation, {
+      to_email:      participant.email,
+      to_name:       participant.name,
+      subject:       subj,
+      matter_name:   ev.matterName,
+      case_number:   ev.caseNumber || 'N/A',
+      event_type:    et.label || ev.type,
+      deadline:      deadline,
+      meeting_duration: ev.mode === 'poll' ? POLL.fmtDuration(POLL.duration(ev)) : '',
+      proposed_slots: EMAIL._slotsHtml(ev),
+      respond_url:   EMAIL._respondUrl(participant.token, ev.id),
+      firm_name:     S.user?.firm || 'LexSchedule',
+      firm_address:  S.user?.firmAddress || '',
+      firm_fax:      S.user?.firmFax || '',
+      sender_name:   S.user?.name || 'LexSchedule',
+      sender_phone:  ev.schedulerPhone || '',
+    }, participant.name, participant.email, 'invitation', subj);
   },
 
-  sendReminder(eventId, participantId) {
+  async sendInvitations(eventId) {
+    const ev = S.events.find(e=>e.id===eventId);
+    if (!ev) return;
+    const results = await Promise.all(ev.participants.map(p => EMAIL.sendInvitationTo(eventId, p)));
+    EMAIL._summarise(eventId, results, 'Scheduling invitations');
+  },
+
+  async sendReminder(eventId, participantId) {
     const ev = S.events.find(e=>e.id===eventId);
     const p  = ev?.participants.find(x=>x.id===participantId);
     if (!ev || !p) return;
@@ -578,7 +713,7 @@ const EMAIL = {
     const et   = EVENT_TYPES[ev.type] || {};
     const subj = `Reminder: Please Respond — ${ev.matterName}`;
     const respondUrl = EMAIL._respondUrl(p.token, ev.id);
-    EMAIL._send(cfg.templateReminder || cfg.templateInvitation, {
+    const res = await EMAIL._deliver(eventId, cfg.templateReminder || cfg.templateInvitation, {
       to_email:    p.email,
       to_name:     p.name,
       subject:     subj,
@@ -590,22 +725,20 @@ const EMAIL = {
       firm_fax:     S.user?.firmFax || '',
       sender_name:  S.user?.name || 'LexSchedule',
       sender_phone: ev.schedulerPhone || '',
-    }, p.name, p.email);
-    EMAIL.log(eventId, p.email, subj, 'reminder');
-    EMAIL.addHistory(eventId, `Reminder sent to ${p.name}`);
-    toast(`Reminder sent to ${p.name}`, 'email');
+    }, p.name, p.email, 'reminder', subj);
+    if (res.ok) EMAIL.addHistory(eventId, `Reminder sent to ${p.name}`);
+    return res;
   },
 
-  sendReminderAll(eventId) {
+  async sendReminderAll(eventId) {
     const ev = S.events.find(e=>e.id===eventId);
     if (!ev) return;
     const pending = ev.participants.filter(p=>p.status==='pending');
-    pending.forEach(p => EMAIL.sendReminder(eventId, p.id));
-    EMAIL.addHistory(eventId, `Reminders sent to ${pending.length} pending participant(s)`);
-    toast(`Reminders sent to ${pending.length} participant(s)`, 'email');
+    const results = await Promise.all(pending.map(p => EMAIL.sendReminder(eventId, p.id)));
+    EMAIL._summarise(eventId, results.filter(Boolean), 'Reminders');
   },
 
-  sendConfirmation(eventId) {
+  async sendConfirmation(eventId, only) {
     const ev = S.events.find(e=>e.id===eventId);
     if (!ev || !ev.confirmedSlot) return;
     const cfg  = (() => { try { return JSON.parse(localStorage.getItem('ejs_config')||'{}'); } catch(e){return{};} })();
@@ -634,29 +767,25 @@ const EMAIL = {
       apple_cal_url:   appleCalUrl,
     });
     const templateId = cfg.templateConfirmation || cfg.templateInvitation;
-    ev.participants.forEach(p => {
-      console.log('[LexSchedule] Sending confirmation to participant:', p.email);
-      EMAIL._send(templateId, confirmParams(p.email, p.name), p.name, p.email);
-      EMAIL.log(eventId, p.email, subj, 'confirmation');
-      toast(`Confirmation sent to ${p.name}`, 'email', 4000);
-    });
-    // Also notify the scheduler
-    if (S.user?.email) {
-      console.log('[LexSchedule] Sending confirmation copy to scheduler:', S.user.email);
-      EMAIL._send(templateId, confirmParams(S.user.email, S.user.name || 'Scheduling Coordinator'), S.user.name, S.user.email);
-      EMAIL.log(eventId, S.user.email, subj, 'confirmation');
-    }
-    EMAIL.addHistory(eventId, `Confirmation emails sent to all ${ev.participants.length} participant(s)`);
+    // `only` limits the send to one address — used when retrying a single failure.
+    const targets = ev.participants.map(p => ({ email:p.email, name:p.name }));
+    if (S.user?.email) targets.push({ email:S.user.email, name:S.user.name || 'Scheduling Coordinator' });
+    const chosen = only ? targets.filter(t => t.email === only) : targets;
+    const results = await Promise.all(chosen.map(t =>
+      EMAIL._deliver(eventId, templateId, confirmParams(t.email, t.name), t.name, t.email, 'confirmation', subj)));
+    if (!only) EMAIL._summarise(eventId, results, 'Confirmation emails');
+    return results[0];
   },
 
-  sendNoMatch(eventId) {
+  async sendNoMatch(eventId, only) {
     const ev = S.events.find(e=>e.id===eventId);
     if (!ev) return;
     const cfg = (() => { try { return JSON.parse(localStorage.getItem('ejs_config')||'{}'); } catch(e){return{};} })();
     const et   = EVENT_TYPES[ev.type] || {};
     const subj = `No Mutual Availability Found \u2014 New Scheduling Process Initiated: ${ev.matterName}`;
-    ev.participants.forEach(p => {
-      EMAIL._send(cfg.templateNoMatch || cfg.templateInvitation, {
+    const chosen = only ? ev.participants.filter(p => p.email === only) : ev.participants;
+    const sends = chosen.map(p =>
+      EMAIL._deliver(eventId, cfg.templateNoMatch || cfg.templateInvitation, {
         to_email:    p.email,
         to_name:     p.name,
         subject:     subj,
@@ -667,12 +796,68 @@ const EMAIL = {
         firm_fax:     S.user?.firmFax || '',
         sender_name:  S.user?.name || 'LexSchedule',
         sender_phone: ev.schedulerPhone || '',
-      }, p.name, p.email);
-      EMAIL.log(eventId, p.email, subj, 'no-match');
-      toast(`No-match notice sent to ${p.name}`, 'warning', 4000);
-    });
-    EMAIL.addHistory(eventId, 'No mutual availability detected \u2014 no-match notifications sent to all parties');
+      }, p.name, p.email, 'no-match', subj));
+    const results = await Promise.all(sends);
+    if (!only) {
+      EMAIL.addHistory(eventId, 'No mutual availability detected \u2014 no-match notifications issued');
+      EMAIL._summarise(eventId, results, 'No-match notices');
+    }
+    return results[0];
   },
+  // Human-readable badge for one delivery attempt.
+  _statusBadge(e) {
+    const map = {
+      sent:           ['#276749', '#E7F4EC', 'Delivered'],
+      failed:         ['#7F1D1D', '#FBE9EC', 'Failed'],
+      not_configured: ['#92400E', '#FEF3C7', 'Not sent — no email setup'],
+      blocked:        ['#7F1D1D', '#FBE9EC', 'Blocked'],
+      unknown:        ['#4B5563', '#F3F4F6', 'Unverified'],
+    };
+    const [fg, bg, label] = map[e.status] || map.unknown;
+    return `<span style="display:inline-block;padding:2px 8px;border-radius:20px;background:${bg};color:${fg};font-size:.66rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;">${label}</span>`;
+  },
+
+  // Panel listing every send attempt and its true outcome.
+  deliveryPanel(ev) {
+    const log = (ev.emailLog || []).slice().reverse();
+    const failed = log.filter(e => !e.ok);
+    const rows = log.map((e, i) => {
+      const origIdx = (ev.emailLog.length - 1) - i;
+      return `<div style="padding:9px 0;border-bottom:1px solid #F3EFE7;">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          ${EMAIL._statusBadge(e)}
+          <span style="font-size:.78rem;font-weight:600;color:#0B1F3A;">${esc(EMAIL_TYPE_LABEL[e.type] || e.type || 'Email')}</span>
+          <span style="font-size:.75rem;color:#4B5563;">&rarr; ${esc(e.to || '')}</span>
+          <span style="margin-left:auto;font-size:.68rem;color:#9CA3AF;white-space:nowrap;">${fmtTS(e.ts)}</span>
+        </div>
+        ${!e.ok && e.error ? `<div style="margin-top:5px;font-size:.73rem;color:#7F1D1D;line-height:1.45;">${esc(e.error)}</div>` : ''}
+        ${!e.ok ? `<button onclick="EMAIL_retry('${ev.id}',${origIdx})" style="margin-top:6px;padding:4px 10px;border:1px solid #D5CCBA;border-radius:6px;background:#fff;color:#4B5563;font-size:.68rem;font-weight:600;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;font-family:'Montserrat',sans-serif;">&#8635; Retry</button>` : ''}
+      </div>`;
+    }).join('');
+
+    const missing = EMAIL._missingConfig('x');
+    const setupWarning = missing.length
+      ? `<div style="background:#FEF3C7;border-left:3px solid #92400E;border-radius:8px;padding:11px 14px;margin-bottom:12px;font-size:.76rem;color:#92400E;line-height:1.5;">
+          <strong>No email service configured in this browser.</strong> Nothing can actually be sent from here
+          (missing ${esc(missing.join(', '))}). Open <strong>Settings &rarr; Email Settings</strong> and enter your EmailJS
+          credentials, then use Retry above.
+        </div>`
+      : '';
+
+    return `<div style="background:#fff;border-radius:12px;border:1px solid ${failed.length?'#E7B4BD':'#EDE6D9'};box-shadow:0 1px 4px rgba(11,31,58,.05);overflow:hidden;margin-bottom:18px;">
+      <div style="padding:16px 18px;border-bottom:1px solid #EDE6D9;display:flex;align-items:center;justify-content:space-between;gap:10px;">
+        <h4 style="font-family:'Cormorant Garamond',serif;font-size:1.1rem;font-weight:600;color:#0B1F3A;">Email Delivery</h4>
+        ${failed.length
+          ? `<span style="padding:3px 10px;border-radius:20px;background:#FBE9EC;color:#7F1D1D;font-size:.68rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;">${failed.length} failed</span>`
+          : (log.length ? `<span style="padding:3px 10px;border-radius:20px;background:#E7F4EC;color:#276749;font-size:.68rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;">All delivered</span>` : '')}
+      </div>
+      <div style="padding:14px 18px;max-height:280px;overflow-y:auto;">
+        ${setupWarning}
+        ${rows || '<p style="font-size:.8rem;color:#9CA3AF;">No emails sent yet.</p>'}
+      </div>
+    </div>`;
+  },
+
   addHistory(eventId, action) {
     const ev = S.events.find(e=>e.id===eventId);
     if (!ev) return;
@@ -1335,7 +1520,21 @@ const HEADER = () => `
     </div>
   </div>
 </header>
-<div style="height:68px;"></div>`;
+<div style="height:68px;"></div>
+${(() => {
+  // Loud, persistent warning: without credentials this browser cannot send any email.
+  const missing = (typeof EMAIL !== 'undefined') ? EMAIL._missingConfig('x') : [];
+  if (!missing.length) return '';
+  return `<div style="background:#FEF3C7;border-bottom:1px solid #F0D89A;padding:10px 28px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-family:'Montserrat',sans-serif;">
+    <span style="font-size:.95rem;">&#9888;&#65039;</span>
+    <span style="flex:1;min-width:240px;font-size:.79rem;color:#92400E;line-height:1.45;">
+      <strong>Email sending is not set up in this browser.</strong>
+      Invitations, reminders and confirmations will <strong>not</strong> reach anyone until you add your EmailJS credentials
+      (missing ${missing.join(', ')}).
+    </span>
+    <button onclick="VIEWS.emailSettings()" style="padding:6px 14px;border:1px solid #92400E;border-radius:6px;background:#fff;color:#92400E;font-size:.72rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;font-family:'Montserrat',sans-serif;white-space:nowrap;">Set Up Email</button>
+  </div>`;
+})()}`;
 
 /* ── Views ─────────────────────────────────────────────── */
 const VIEWS = {
@@ -1674,6 +1873,19 @@ const VIEWS = {
         <div style="background:#FEF3C7;border-radius:8px;padding:12px 14px;font-size:.77rem;color:#92400E;margin-top:4px;">
           <strong>Template variables available:</strong> to_name, to_email, subject, matter_name, case_number,
           event_type, deadline, proposed_slots, respond_url, confirmed_date, confirmed_time, location, sender_name
+        </div>
+        <div style="border-top:1px solid #EDE6D9;margin-top:18px;padding-top:16px;">
+          <label style="display:block;font-size:.76rem;font-weight:600;color:#4B5563;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;">Test your email service</label>
+          <p style="font-size:.77rem;color:#6B7280;line-height:1.5;margin:0 0 9px;">
+            Save your settings first, then send a real test email. This uses the same path as a live invitation,
+            so if it fails you will see the exact reason your email service gave.
+          </p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <input id="ejs_testTo" type="email" value="${esc(S.user?.email||'')}" placeholder="you@yourfirm.com"
+              style="flex:1;min-width:200px;box-sizing:border-box;padding:9px 12px;border:1.5px solid #E5E7EB;border-radius:7px;font-size:.84rem;font-family:'Montserrat',sans-serif;outline:none;" />
+            <button class="btn btn-outline" onclick="EJS_sendTest()" style="white-space:nowrap;">Send Test Email</button>
+          </div>
+          <div id="ejs_testResult" style="display:none;margin-top:11px;border-radius:8px;padding:11px 14px;font-size:.78rem;line-height:1.5;"></div>
         </div>
       </div>
       <div class="modal-footer">
@@ -2550,6 +2762,8 @@ const VIEWS = {
               <div><strong>Created:</strong> ${fmtDateShort(new Date(ev.createdAt).toISOString().slice(0,10))}</div>
             </div>
           </div>
+          <!-- Email delivery -->
+          ${EMAIL.deliveryPanel(ev)}
           <!-- History -->
           <div style="background:#fff;border-radius:12px;border:1px solid #EDE6D9;box-shadow:0 1px 4px rgba(11,31,58,.05);overflow:hidden;">
             <div style="padding:16px 18px;border-bottom:1px solid #EDE6D9;display:flex;align-items:center;justify-content:space-between;">
@@ -3779,30 +3993,15 @@ window.EVENTS_addParticipantSave = function(eventId) {
   STORE.save();
 
   // Send invitation immediately
-  const cfg = (() => { try { return JSON.parse(localStorage.getItem('ejs_config')||'{}'); } catch(e){return{};} })();
-  const et  = EVENT_TYPES[ev.type] || {};
-  const deadline   = ev.deadline ? fmtDate(new Date(ev.deadline).toISOString().slice(0,10)) : 'As soon as possible';
-  const slotsText = EMAIL._slotsHtml(ev);
-  const respondUrl = EMAIL._respondUrl(newP.token, ev.id);
-  const subj = `Scheduling Invitation: ${ev.matterName}`;
-  EMAIL._send(cfg.templateInvitation, {
-    to_email:       newP.email,
-    to_name:        newP.name,
-    subject:        subj,
-    matter_name:    ev.matterName,
-    case_number:    ev.caseNumber || 'N/A',
-    event_type:     et.label || ev.type,
-    deadline,
-    proposed_slots: slotsText,
-    respond_url:    respondUrl,
-    sender_name:    S.user?.name || 'LexSchedule',
-    sender_phone:   ev.schedulerPhone || '',
-  }, newP.name, newP.email);
-  EMAIL.log(eventId, newP.email, subj, 'invitation');
-
   modal.close();
-  toast(`${name} added and invitation sent.`, 'success', 5000);
   VIEWS.eventDetail(eventId);
+
+  EMAIL.sendInvitationTo(eventId, newP).then(res => {
+    EMAIL.addHistory(eventId, res.ok
+      ? `${name} added and invitation delivered`
+      : `${name} added, but the invitation FAILED to send — ${res.error}`);
+    EMAIL._refresh(eventId);
+  });
 };
 
 /* ── Edit Participant Email ───────────────────────────── */
@@ -4412,6 +4611,35 @@ window.AVAIL  = AVAIL;
 window.STORE  = STORE;
 window.ROUTER = ROUTER;
 window.modal  = modal;
+
+/* ── Retry a failed email ─────────────────────────────── */
+window.EMAIL_retry = async function(eventId, logIdx) {
+  const ev = S.events.find(e => e.id === eventId);
+  if (!ev) return;
+  const entry = (ev.emailLog || [])[logIdx];
+  if (!entry) return;
+
+  const missing = EMAIL._missingConfig('x');
+  if (missing.length) {
+    toast(`Still no email service configured (missing ${missing.join(', ')}). Set it up in Settings first.`, 'error', 9000);
+    return;
+  }
+
+  const p = ev.participants.find(x => x.email === entry.to);
+  const isScheduler = !p && entry.to === S.user?.email;
+  if (!p && !isScheduler) {
+    toast('That recipient is no longer on this event.', 'warning', 6000);
+    return;
+  }
+
+  toast(`Retrying ${EMAIL_TYPE_LABEL[entry.type] || 'email'} to ${entry.to}…`, 'info', 3000);
+  if (entry.type === 'reminder' && p)       await EMAIL.sendReminder(eventId, p.id);
+  else if (entry.type === 'confirmation')   await EMAIL.sendConfirmation(eventId, entry.to);
+  else if (entry.type === 'no-match')       await EMAIL.sendNoMatch(eventId, entry.to);
+  else if (p)                               await EMAIL.sendInvitationTo(eventId, p);
+  EMAIL._refresh(eventId);
+};
+
 window.toast  = toast;
 
 /* ── Init ─────────────────────────────────────────────── */
