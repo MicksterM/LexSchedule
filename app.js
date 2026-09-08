@@ -453,16 +453,12 @@ window.ICS = ICS;
 const EMAILJS_DEFAULTS = {
   publicKey:            'TEO5CaPKuXrk7WRZK',
   serviceId:            'service_y867n3o',
-  templateInvitation:   'template_ewssqrb',   // verified against the EmailJS dashboard
-  templateConfirmation: 'template_oyhj3vq',   // verified against the EmailJS dashboard
-  // Reminder and no-match IDs were wrong in the original configuration and have
-  // not been re-verified. Left blank deliberately: blank falls back to the
-  // invitation template, which is known to exist. A stale ID here would be
-  // rejected outright and the notice would never arrive, which is worse than
-  // arriving with invitation wording. Fill these in once confirmed.
-  templateReminder:     '',
-  templateNoMatch:      '',
-  templateWaitlist:     'template_6wlskjg',   // unverified
+  // All five verified against the EmailJS dashboard on 2026-09-08.
+  templateInvitation:   'template_ewssqrb',
+  templateReminder:     'template_wyotfqb',
+  templateConfirmation: 'template_oyhj3vq',
+  templateNoMatch:      'template_rfgvc9s',
+  templateWaitlist:     'template_6wlskjg',
 };
 
 /* Purge credentials saved by the old Settings screen.
