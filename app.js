@@ -448,22 +448,41 @@ window.ICS = ICS;
  *
  * To rotate a credential, change it here and redeploy. Nothing else reads
  * credentials from anywhere else, except an optional per-browser override
- * kept for staging/testing (localStorage key 'ejs_config').
+ * kept for staging/testing (localStorage key 'ejs_override').
  */
 const EMAILJS_DEFAULTS = {
   publicKey:            'TEO5CaPKuXrk7WRZK',
   serviceId:            'service_y867n3o',
-  templateInvitation:   'template_h4c983x',
-  templateReminder:     'template_wyotfqb',
-  templateConfirmation: 'template_nf5lmsm',
-  templateNoMatch:      'template_rfgvc9s',
-  templateWaitlist:     'template_6wlskjg',
+  templateInvitation:   'template_ewssqrb',   // verified against the EmailJS dashboard
+  templateConfirmation: 'template_oyhj3vq',   // verified against the EmailJS dashboard
+  // Reminder and no-match IDs were wrong in the original configuration and have
+  // not been re-verified. Left blank deliberately: blank falls back to the
+  // invitation template, which is known to exist. A stale ID here would be
+  // rejected outright and the notice would never arrive, which is worse than
+  // arriving with invitation wording. Fill these in once confirmed.
+  templateReminder:     '',
+  templateNoMatch:      '',
+  templateWaitlist:     'template_6wlskjg',   // unverified
 };
 
-// Optional per-browser override, used only for testing against another
-// EmailJS account. A blank field here never masks a built-in default.
+/* Purge credentials saved by the old Settings screen.
+ *
+ * Those were entered by hand, are known to contain wrong template IDs, and
+ * would otherwise take precedence over the correct values shipped above —
+ * so every browser that ever visited the old Settings page would keep
+ * failing after this fix. The old screen is gone and nothing writes this
+ * key any more, so anything still under it is stale by definition.
+ */
+(function purgeLegacyEmailConfig() {
+  try { localStorage.removeItem('ejs_config'); } catch (e) { /* private mode */ }
+})();
+
+// Optional per-browser override for testing against another EmailJS account.
+// Deliberately a different key from the legacy one above, and set by hand only.
+// A blank field here never masks a built-in default.
+const EJS_OVERRIDE_KEY = 'ejs_override';
 const _ejsOverride = () => {
-  try { return JSON.parse(localStorage.getItem('ejs_config') || '{}'); }
+  try { return JSON.parse(localStorage.getItem(EJS_OVERRIDE_KEY) || '{}'); }
   catch (e) { return {}; }
 };
 
@@ -493,7 +512,7 @@ const EMAILJS_CONFIG = {
 
 // Drop the per-browser staging override and fall back to the shipped credentials.
 window.EJS_clearOverride = function() {
-  localStorage.removeItem('ejs_config');
+  localStorage.removeItem(EJS_OVERRIDE_KEY);
   if (EMAILJS_DEFAULTS.publicKey && typeof emailjs !== 'undefined') {
     emailjs.init({ publicKey: EMAILJS_DEFAULTS.publicKey });
   }
