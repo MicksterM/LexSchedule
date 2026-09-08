@@ -438,33 +438,67 @@ const ICS = {
 window.ICS = ICS;
 
 /* ── EmailJS Config ────────────────────────────────────── */
-// Paste your EmailJS credentials here after signing up at emailjs.com
-// Or use the Settings page in the app (gear icon) to enter them without editing code.
-const EMAILJS_CONFIG = (() => {
-  const saved = (() => { try { return JSON.parse(localStorage.getItem('ejs_config')||'{}'); } catch(e){return{};} })();
-  return {
-    get publicKey()    { return saved.publicKey    || ''; },
-    get serviceId()    { return saved.serviceId    || ''; },
-    get templateInvitation()  { return saved.templateInvitation  || ''; },
-    get templateReminder()    { return saved.templateReminder    || ''; },
-    get templateConfirmation(){ return saved.templateConfirmation|| ''; },
-    get templateNoMatch()     { return saved.templateNoMatch     || ''; },
-    get templateWaitlist()    { return saved.templateWaitlist    || 'template_6wlskjg'; },
-    isConfigured() {
-      return !!(this.publicKey && this.serviceId && this.templateInvitation);
-    }
-  };
-})();
+/* THE ONLY PLACE EMAIL CREDENTIALS LIVE.
+ *
+ * These are LexSchedule's own EmailJS credentials and ship with the app, so
+ * users never configure anything — email simply works when they sign up.
+ * An EmailJS Public Key is designed to be published in client code; it is not
+ * a secret. Abuse is prevented in the EmailJS dashboard instead:
+ *   Account → Security → Allowed Origins → add this app's domain only.
+ *
+ * To rotate a credential, change it here and redeploy. Nothing else reads
+ * credentials from anywhere else, except an optional per-browser override
+ * kept for staging/testing (localStorage key 'ejs_config').
+ */
+const EMAILJS_DEFAULTS = {
+  publicKey:            'TEO5CaPKuXrk7WRZK',
+  serviceId:            'service_y867n3o',
+  templateInvitation:   'template_h4c983x',
+  templateReminder:     'template_wyotfqb',
+  templateConfirmation: 'template_nf5lmsm',
+  templateNoMatch:      'template_rfgvc9s',
+  templateWaitlist:     'template_6wlskjg',
+};
 
-window.EJS_saveConfig = function() {
-  const fields = ['publicKey','serviceId','templateInvitation','templateReminder','templateConfirmation','templateNoMatch','templateWaitlist'];
-  const cfg = {};
-  fields.forEach(f => { cfg[f] = (document.getElementById('ejs_'+f)||{}).value?.trim()||''; });
-  localStorage.setItem('ejs_config', JSON.stringify(cfg));
-  // Re-init EmailJS with new key
-  if (cfg.publicKey && typeof emailjs !== 'undefined') emailjs.init({ publicKey: cfg.publicKey });
-  toast('Email settings saved. Sending a test invitation will confirm they work.', 'success', 5000);
-  modal.close();
+// Optional per-browser override, used only for testing against another
+// EmailJS account. A blank field here never masks a built-in default.
+const _ejsOverride = () => {
+  try { return JSON.parse(localStorage.getItem('ejs_config') || '{}'); }
+  catch (e) { return {}; }
+};
+
+// The effective credentials: built-in defaults, with any non-blank override on top.
+const EJS_CFG = () => {
+  const ov = _ejsOverride();
+  const out = Object.assign({}, EMAILJS_DEFAULTS);
+  Object.keys(EMAILJS_DEFAULTS).forEach(k => {
+    if (ov[k] && String(ov[k]).trim()) out[k] = String(ov[k]).trim();
+  });
+  return out;
+};
+
+const EMAILJS_CONFIG = {
+  get publicKey()           { return EJS_CFG().publicKey; },
+  get serviceId()           { return EJS_CFG().serviceId; },
+  get templateInvitation()  { return EJS_CFG().templateInvitation; },
+  get templateReminder()    { return EJS_CFG().templateReminder; },
+  get templateConfirmation(){ return EJS_CFG().templateConfirmation; },
+  get templateNoMatch()     { return EJS_CFG().templateNoMatch; },
+  get templateWaitlist()    { return EJS_CFG().templateWaitlist; },
+  isConfigured() {
+    const c = EJS_CFG();
+    return !!(c.publicKey && c.serviceId && c.templateInvitation);
+  },
+};
+
+// Drop the per-browser staging override and fall back to the shipped credentials.
+window.EJS_clearOverride = function() {
+  localStorage.removeItem('ejs_config');
+  if (EMAILJS_DEFAULTS.publicKey && typeof emailjs !== 'undefined') {
+    emailjs.init({ publicKey: EMAILJS_DEFAULTS.publicKey });
+  }
+  toast('Local override cleared — using the application\'s own email service.', 'success', 5000);
+  VIEWS.emailSettings();
 };
 
 // Send a real test email through the exact same path as a live invitation,
@@ -482,7 +516,7 @@ window.EJS_sendTest = async function() {
     show('#FBE9EC', '#8B1C2E', '#7F1D1D', 'Enter a valid email address to send the test to.');
     return;
   }
-  const cfg = (() => { try { return JSON.parse(localStorage.getItem('ejs_config')||'{}'); } catch(e){return{};} })();
+  const cfg = EJS_CFG();
   const templateId = cfg.templateInvitation;
   show('#EBF0F7', '#0B1F3A', '#374151', 'Sending test email…');
 
@@ -517,7 +551,7 @@ window.EJS_sendTest = async function() {
 // Initialize EmailJS on load if already configured
 (function initEmailJS() {
   if (typeof emailjs !== 'undefined') {
-    const cfg = (() => { try { return JSON.parse(localStorage.getItem('ejs_config')||'{}'); } catch(e){return{};} })();
+    const cfg = EJS_CFG();
     if (cfg.publicKey) emailjs.init({ publicKey: cfg.publicKey });
   }
 })();
@@ -565,9 +599,10 @@ const EMAIL = {
     }
   },
 
-  // Which credentials are missing, if any.
+  // Which credentials are missing, if any. With EMAILJS_DEFAULTS filled in
+  // this is always empty — it only fires if the build shipped incomplete.
   _missingConfig(templateId) {
-    const cfg = (() => { try { return JSON.parse(localStorage.getItem('ejs_config')||'{}'); } catch(e){return{};} })();
+    const cfg = EJS_CFG();
     const missing = [];
     if (!cfg.publicKey) missing.push('Public Key');
     if (!cfg.serviceId) missing.push('Service ID');
@@ -578,7 +613,7 @@ const EMAIL = {
   // Internal: send one email via EmailJS.
   // Always resolves to { ok, status, error } — never silently claims success.
   _send(templateId, params, recipientName, recipientEmail) {
-    const cfg = (() => { try { return JSON.parse(localStorage.getItem('ejs_config')||'{}'); } catch(e){return{};} })();
+    const cfg = EJS_CFG();
     if (typeof emailjs === 'undefined') {
       return Promise.resolve({ ok:false, status:'blocked',
         error:'The EmailJS library did not load — a network block or ad blocker is preventing all sending' });
@@ -586,7 +621,7 @@ const EMAIL = {
     const missing = EMAIL._missingConfig(templateId);
     if (missing.length) {
       return Promise.resolve({ ok:false, status:'not_configured',
-        error:`Email service is not set up in this browser — missing ${missing.join(', ')}` });
+        error:`Email service unavailable — the application is missing ${missing.join(', ')}. Contact support.` });
     }
     return emailjs.send(cfg.serviceId, templateId, params)
       .then(res => ({ ok:true, status:'sent', code: res && res.status }))
@@ -675,7 +710,7 @@ const EMAIL = {
   sendInvitationTo(eventId, participant) {
     const ev = S.events.find(e=>e.id===eventId);
     if (!ev || !participant) return Promise.resolve({ ok:false, status:'failed', error:'Event or participant not found' });
-    const cfg = (() => { try { return JSON.parse(localStorage.getItem('ejs_config')||'{}'); } catch(e){return{};} })();
+    const cfg = EJS_CFG();
     const et = EVENT_TYPES[ev.type] || {};
     const deadline = ev.deadline ? fmtDate(new Date(ev.deadline).toISOString().slice(0,10)) : 'As soon as possible';
     const subj = `Scheduling Invitation: ${ev.matterName}`;
@@ -709,7 +744,7 @@ const EMAIL = {
     const ev = S.events.find(e=>e.id===eventId);
     const p  = ev?.participants.find(x=>x.id===participantId);
     if (!ev || !p) return;
-    const cfg = (() => { try { return JSON.parse(localStorage.getItem('ejs_config')||'{}'); } catch(e){return{};} })();
+    const cfg = EJS_CFG();
     const et   = EVENT_TYPES[ev.type] || {};
     const subj = `Reminder: Please Respond — ${ev.matterName}`;
     const respondUrl = EMAIL._respondUrl(p.token, ev.id);
@@ -741,7 +776,7 @@ const EMAIL = {
   async sendConfirmation(eventId, only) {
     const ev = S.events.find(e=>e.id===eventId);
     if (!ev || !ev.confirmedSlot) return;
-    const cfg  = (() => { try { return JSON.parse(localStorage.getItem('ejs_config')||'{}'); } catch(e){return{};} })();
+    const cfg  = EJS_CFG();
     const slot = ev.proposedSlots.find(s=>s.id===ev.confirmedSlot);
     const subj = `Confirmed: ${ev.matterName} \u2014 ${fmtDateShort(slot?.date||'')}`;
     const et         = EVENT_TYPES[ev.type] || {};
@@ -780,7 +815,7 @@ const EMAIL = {
   async sendNoMatch(eventId, only) {
     const ev = S.events.find(e=>e.id===eventId);
     if (!ev) return;
-    const cfg = (() => { try { return JSON.parse(localStorage.getItem('ejs_config')||'{}'); } catch(e){return{};} })();
+    const cfg = EJS_CFG();
     const et   = EVENT_TYPES[ev.type] || {};
     const subj = `No Mutual Availability Found \u2014 New Scheduling Process Initiated: ${ev.matterName}`;
     const chosen = only ? ev.participants.filter(p => p.email === only) : ev.participants;
@@ -835,12 +870,11 @@ const EMAIL = {
       </div>`;
     }).join('');
 
-    const missing = EMAIL._missingConfig('x');
+    const missing = EMAIL._missingConfig(EMAILJS_CONFIG.templateInvitation);
     const setupWarning = missing.length
-      ? `<div style="background:#FEF3C7;border-left:3px solid #92400E;border-radius:8px;padding:11px 14px;margin-bottom:12px;font-size:.76rem;color:#92400E;line-height:1.5;">
-          <strong>No email service configured in this browser.</strong> Nothing can actually be sent from here
-          (missing ${esc(missing.join(', '))}). Open <strong>Settings &rarr; Email Settings</strong> and enter your EmailJS
-          credentials, then use Retry above.
+      ? `<div style="background:#FBE9EC;border-left:3px solid #8B1C2E;border-radius:8px;padding:11px 14px;margin-bottom:12px;font-size:.76rem;color:#7F1D1D;line-height:1.5;">
+          <strong>Email delivery is unavailable.</strong> Nothing can be sent until this is corrected in the
+          application itself &mdash; please contact support. Retry will work once service is restored.
         </div>`
       : '';
 
@@ -1522,17 +1556,18 @@ const HEADER = () => `
 </header>
 <div style="height:68px;"></div>
 ${(() => {
-  // Loud, persistent warning: without credentials this browser cannot send any email.
-  const missing = (typeof EMAIL !== 'undefined') ? EMAIL._missingConfig('x') : [];
+  // Credentials ship with the build, so a gap here is a deployment fault, not
+  // something a user can or should fix. Surface it plainly rather than silently
+  // dropping every invitation.
+  const missing = (typeof EMAIL !== 'undefined') ? EMAIL._missingConfig(EMAILJS_CONFIG.templateInvitation) : [];
   if (!missing.length) return '';
-  return `<div style="background:#FEF3C7;border-bottom:1px solid #F0D89A;padding:10px 28px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-family:'Montserrat',sans-serif;">
+  return `<div style="background:#FBE9EC;border-bottom:1px solid #E7B4BD;padding:10px 28px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-family:'Montserrat',sans-serif;">
     <span style="font-size:.95rem;">&#9888;&#65039;</span>
-    <span style="flex:1;min-width:240px;font-size:.79rem;color:#92400E;line-height:1.45;">
-      <strong>Email sending is not set up in this browser.</strong>
-      Invitations, reminders and confirmations will <strong>not</strong> reach anyone until you add your EmailJS credentials
-      (missing ${missing.join(', ')}).
+    <span style="flex:1;min-width:240px;font-size:.79rem;color:#7F1D1D;line-height:1.45;">
+      <strong>Email delivery is unavailable.</strong>
+      Invitations and confirmations cannot be sent right now. Our team has been alerted &mdash;
+      please contact support before relying on automated notices.
     </span>
-    <button onclick="VIEWS.emailSettings()" style="padding:6px 14px;border:1px solid #92400E;border-radius:6px;background:#fff;color:#92400E;font-size:.72rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;font-family:'Montserrat',sans-serif;white-space:nowrap;">Set Up Email</button>
   </div>`;
 })()}`;
 
@@ -1835,62 +1870,76 @@ const VIEWS = {
       </div>
       <div class="modal-footer">
         <button class="btn btn-outline" onclick="closeModal()">Close</button>
-        <button class="btn btn-outline" onclick="VIEWS.emailSettings()">&#9881; Email Settings</button>
+        <button class="btn btn-outline" onclick="VIEWS.emailSettings()">&#9881; Email Diagnostics</button>
         <button class="btn btn-danger" onclick="closeModal();AUTH.logout();">Sign Out</button>
       </div>`);
   },
 
   emailSettings() {
-    const cfg = (() => { try { return JSON.parse(localStorage.getItem('ejs_config')||'{}'); } catch(e){return{};} })();
-    const v = f => esc(cfg[f]||'');
-    const field = (id, label, placeholder, val) =>
-      `<div style="margin-bottom:14px;">
-        <label style="display:block;font-size:.76rem;font-weight:600;color:#4B5563;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;">${label}</label>
-        <input id="ejs_${id}" type="text" value="${val}" placeholder="${placeholder}"
-          style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid #E5E7EB;border-radius:7px;font-size:.84rem;font-family:'Montserrat',sans-serif;outline:none;" />
+    const cfg = EJS_CFG();
+    const ov  = _ejsOverride();
+    const mask = s => !s ? '' : (s.length <= 8 ? s : s.slice(0, 4) + '…' + s.slice(-4));
+    const usingOverride = Object.keys(EMAILJS_DEFAULTS).some(k => ov[k] && String(ov[k]).trim());
+    const missing = EMAIL._missingConfig(cfg.templateInvitation);
+
+    const row = (label, val, isOverridden) =>
+      `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid #F3EFE7;">
+        <span style="font-size:.76rem;color:#4B5563;">${label}</span>
+        <span style="font-size:.75rem;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:${val?'#0B1F3A':'#8B1C2E'};">
+          ${val ? esc(mask(val)) : 'not set'}${isOverridden ? ' <span style="color:#92400E;font-family:Montserrat,sans-serif;font-size:.66rem;font-weight:700;">OVERRIDE</span>' : ''}
+        </span>
       </div>`;
+
+    const health = missing.length
+      ? `<div style="background:#FBE9EC;border-left:3px solid #8B1C2E;border-radius:8px;padding:12px 14px;font-size:.79rem;color:#7F1D1D;line-height:1.5;">
+           <strong>Email delivery is unavailable.</strong> This build is missing ${esc(missing.join(', '))}.
+           No invitation, reminder or confirmation can be sent until that is corrected in the app's deployment.
+         </div>`
+      : `<div style="background:#E7F4EC;border-left:3px solid #276749;border-radius:8px;padding:12px 14px;font-size:.79rem;color:#276749;line-height:1.5;">
+           <strong>Email delivery is active.</strong> Invitations, reminders and confirmations send automatically.
+           Nothing here needs your attention &mdash; use the test below if you want to verify it end to end.
+         </div>`;
+
     modal.open(`
       <div class="modal-header" style="background:#0B1F3A;border-radius:18px 18px 0 0;">
-        <h3 class="modal-title" style="color:#fff">&#9881; Email Settings</h3>
+        <h3 class="modal-title" style="color:#fff">&#9881; Email Diagnostics</h3>
         <button class="modal-close" style="background:rgba(255,255,255,.1);color:#fff;border:none" onclick="closeModal()">&#10005;</button>
       </div>
       <div class="modal-body">
-        <div style="background:#EBF0F7;border-radius:9px;padding:14px 16px;margin-bottom:20px;font-size:.8rem;color:#374151;line-height:1.55;">
-          <strong style="color:#0B1F3A;">How to set up real email sending:</strong><br>
-          1. Sign up free at <strong>emailjs.com</strong><br>
-          2. Add Email Service (Gmail or Outlook) &rarr; copy the <strong>Service ID</strong><br>
-          3. Create email templates &rarr; copy each <strong>Template ID</strong><br>
-          4. Go to Account &rarr; copy your <strong>Public Key</strong><br>
-          5. Paste below and save.
-        </div>
-        ${field('publicKey',    'Public Key',             'e.g. user_XXXXXXXXXXXX',      v('publicKey'))}
-        ${field('serviceId',    'Service ID',             'e.g. service_XXXXXXX',        v('serviceId'))}
-        ${field('templateInvitation',   'Template ID — Invitation',   'e.g. template_XXXXXXX', v('templateInvitation'))}
-        ${field('templateReminder',     'Template ID — Reminder',     'e.g. template_XXXXXXX (or leave blank to reuse Invitation)', v('templateReminder'))}
-        ${field('templateConfirmation', 'Template ID — Confirmation', 'e.g. template_XXXXXXX (or leave blank to reuse Invitation)', v('templateConfirmation'))}
-        ${field('templateNoMatch',      'Template ID — No Match',     'e.g. template_XXXXXXX (or leave blank to reuse Invitation)', v('templateNoMatch'))}
-        ${field('templateWaitlist',     'Template ID — Waitlist Notification', 'e.g. template_XXXXXXX', v('templateWaitlist'))}
-        <div style="background:#FEF3C7;border-radius:8px;padding:12px 14px;font-size:.77rem;color:#92400E;margin-top:4px;">
-          <strong>Template variables available:</strong> to_name, to_email, subject, matter_name, case_number,
-          event_type, deadline, proposed_slots, respond_url, confirmed_date, confirmed_time, location, sender_name
-        </div>
-        <div style="border-top:1px solid #EDE6D9;margin-top:18px;padding-top:16px;">
-          <label style="display:block;font-size:.76rem;font-weight:600;color:#4B5563;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;">Test your email service</label>
+        ${health}
+
+        <div style="margin-top:20px;">
+          <label style="display:block;font-size:.72rem;font-weight:700;color:#0B1F3A;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;">Send a test email</label>
           <p style="font-size:.77rem;color:#6B7280;line-height:1.5;margin:0 0 9px;">
-            Save your settings first, then send a real test email. This uses the same path as a live invitation,
-            so if it fails you will see the exact reason your email service gave.
+            Sends through the exact path a real invitation uses. If it fails you will see the precise reason.
           </p>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <input id="ejs_testTo" type="email" value="${esc(S.user?.email||'')}" placeholder="you@yourfirm.com"
               style="flex:1;min-width:200px;box-sizing:border-box;padding:9px 12px;border:1.5px solid #E5E7EB;border-radius:7px;font-size:.84rem;font-family:'Montserrat',sans-serif;outline:none;" />
-            <button class="btn btn-outline" onclick="EJS_sendTest()" style="white-space:nowrap;">Send Test Email</button>
+            <button class="btn btn-primary" onclick="EJS_sendTest()" style="white-space:nowrap;">Send Test Email</button>
           </div>
           <div id="ejs_testResult" style="display:none;margin-top:11px;border-radius:8px;padding:11px 14px;font-size:.78rem;line-height:1.5;"></div>
         </div>
+
+        <details style="margin-top:22px;">
+          <summary style="cursor:pointer;font-size:.74rem;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.06em;">Advanced &mdash; active mail configuration</summary>
+          <div style="margin-top:12px;">
+            <p style="font-size:.76rem;color:#6B7280;line-height:1.5;margin:0 0 10px;">
+              These credentials ship with the application. You do not need to set them up.
+              ${usingOverride ? '<strong style="color:#92400E;">A local override is active in this browser and is taking precedence.</strong>' : ''}
+            </p>
+            ${row('Public Key',   cfg.publicKey,           !!ov.publicKey)}
+            ${row('Service ID',   cfg.serviceId,           !!ov.serviceId)}
+            ${row('Invitation',   cfg.templateInvitation,  !!ov.templateInvitation)}
+            ${row('Reminder',     cfg.templateReminder,    !!ov.templateReminder)}
+            ${row('Confirmation', cfg.templateConfirmation,!!ov.templateConfirmation)}
+            ${row('No-match',     cfg.templateNoMatch,     !!ov.templateNoMatch)}
+            ${usingOverride ? `<button class="btn btn-outline" style="margin-top:12px;" onclick="EJS_clearOverride()">Clear local override</button>` : ''}
+          </div>
+        </details>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-outline" onclick="closeModal()">Cancel</button>
-        <button class="btn btn-primary" onclick="EJS_saveConfig()">Save Settings</button>
+        <button class="btn btn-primary" onclick="closeModal()">Close</button>
       </div>`);
   },
 
@@ -4619,9 +4668,8 @@ window.EMAIL_retry = async function(eventId, logIdx) {
   const entry = (ev.emailLog || [])[logIdx];
   if (!entry) return;
 
-  const missing = EMAIL._missingConfig('x');
-  if (missing.length) {
-    toast(`Still no email service configured (missing ${missing.join(', ')}). Set it up in Settings first.`, 'error', 9000);
+  if (EMAIL._missingConfig(EMAILJS_CONFIG.templateInvitation).length) {
+    toast('Email delivery is still unavailable — please contact support.', 'error', 9000);
     return;
   }
 
