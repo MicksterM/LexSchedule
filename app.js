@@ -56,6 +56,14 @@ function _firmId() {
   return S?.user?.id || fbAuth.currentUser?.uid || 'unknown';
 }
 
+// Directory the app is served from, with a trailing slash — e.g.
+// 'https://www.lexschedule.com/' or 'https://micksterm.github.io/lexschedule/'.
+// Derived at runtime so moving domains needs no code change.
+function _appBase() {
+  const base = window.location.href.split('?')[0].split('#')[0];
+  return base.endsWith('/') ? base : base.substring(0, base.lastIndexOf('/') + 1);
+}
+
 /* ── LexSchedule Logo SVG (red calendar + gold scales superimposed) ─── */
 const logoSVG = (sz = 28) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" width="${sz}" height="${sz}">
   <!-- Center post -->
@@ -704,20 +712,14 @@ const EMAIL = {
   // Build the Apple Calendar ICS download URL for a confirmed event.
   // Points to cal.html — a real file served directly by GitHub Pages.
   _appleCalUrl(eventId) {
-    const base = window.location.href.split('?')[0].split('#')[0];
-    const dir  = base.endsWith('/') ? base : base.substring(0, base.lastIndexOf('/') + 1);
-    const firmId = _firmId();
-    return `${dir}cal.html?e=${eventId}&f=${firmId}`;
+    return `${_appBase()}cal.html?e=${eventId}&f=${_firmId()}`;
   },
 
   // Build the respond URL for a participant token.
   // Points to respond.html — a real file GitHub Pages serves directly,
   // with no dependency on hash routing, Firebase timing, or inline scripts.
   _respondUrl(token, eventId) {
-    const base = window.location.href.split('?')[0].split('#')[0];
-    const dir  = base.endsWith('/') ? base : base.substring(0, base.lastIndexOf('/') + 1);
-    const firmId = _firmId();
-    return `${dir}respond.html?t=${token}&e=${eventId}&f=${firmId}`;
+    return `${_appBase()}respond.html?t=${token}&e=${eventId}&f=${_firmId()}`;
   },
 
   // Send the invitation to one participant. Used for the initial blast,
@@ -3438,7 +3440,7 @@ window.AUTH_verify = async function() {
 window.AUTH_resendCode = async function() {
   const fbUser = fbAuth.currentUser;
   if (fbUser) {
-    await fbUser.sendEmailVerification({ url: 'https://micksterm.github.io/lexschedule/#/login' });
+    await fbUser.sendEmailVerification({ url: `${_appBase()}#/login` });
     toast('A new verification email has been sent.', 'success', 5000);
   } else {
     toast('Please sign in again to resend verification.', 'warning', 5000);
