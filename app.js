@@ -461,12 +461,14 @@ window.ICS = ICS;
 const EMAILJS_DEFAULTS = {
   publicKey:            'TEO5CaPKuXrk7WRZK',
   serviceId:            'service_y867n3o',
-  // All five verified against the EmailJS dashboard on 2026-09-08.
-  templateInvitation:   'template_ewssqrb',
-  templateReminder:     'template_wyotfqb',
-  templateConfirmation: 'template_oyhj3vq',
-  templateNoMatch:      'template_rfgvc9s',
-  templateWaitlist:     'template_6wlskjg',
+  // Status is by actual delivery, not by reading the dashboard list — two IDs
+  // taken from that list turned out not to exist. Only templateInvitation was
+  // ever genuinely wrong; template_h4c983x does not exist in the account.
+  templateInvitation:   'template_ewssqrb',   // proven — test send succeeded
+  templateReminder:     'template_wyotfqb',   // proven — reminder delivered
+  templateConfirmation: 'template_nf5lmsm',   // read from the template's own URL
+  templateNoMatch:      'template_rfgvc9s',   // unproven — never exercised
+  templateWaitlist:     'template_6wlskjg',   // unproven — never exercised
 };
 
 /* Purge credentials saved by the old Settings screen.
