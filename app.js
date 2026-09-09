@@ -2590,8 +2590,9 @@ const VIEWS = {
             <div style="font-family:'Cormorant Garamond',serif;font-size:1.5rem;font-weight:600;color:#fff;">${fmtDate(confirmed.date)}</div>
             <div style="font-size:.84rem;color:rgba(255,255,255,.65);margin-top:3px;">${fmtTime(confirmed.startTime)} – ${fmtTime(ev.confirmedEndTime || confirmed.endTime)} Eastern · ${esc(ev.location==='phone'&&ev.phoneNumber ? '📞 '+ev.phoneNumber : ev.locationDetails||ev.location)}</div>
           </div>
-          <div style="margin-left:auto;">
-            <button onclick="EMAIL.previewModal('${ev.id}','confirmation')" style="padding:9px 18px;border:1px solid rgba(192,157,95,.5);border-radius:8px;font-size:.74rem;font-weight:600;background:transparent;color:#C09D5F;cursor:pointer;font-family:'Montserrat',sans-serif;">View Confirmation Email</button>
+          <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+            <button onclick="EMAIL.previewModal('${ev.id}','confirmation')" style="padding:9px 18px;border:1px solid rgba(192,157,95,.5);border-radius:8px;font-size:.74rem;font-weight:600;background:transparent;color:#C09D5F;cursor:pointer;font-family:'Montserrat',sans-serif;white-space:nowrap;">View Confirmation Email</button>
+            <button onclick="EVENTS_resendConfirmation('${ev.id}')" style="padding:9px 18px;border:none;border-radius:8px;font-size:.74rem;font-weight:700;background:#C09D5F;color:#0B1F3A;cursor:pointer;font-family:'Montserrat',sans-serif;white-space:nowrap;">Resend Confirmation</button>
           </div>
         </div>` : ''}
 
@@ -4679,6 +4680,58 @@ window.AVAIL  = AVAIL;
 window.STORE  = STORE;
 window.ROUTER = ROUTER;
 window.modal  = modal;
+
+/* ── Resend the confirmation email ────────────────────── */
+// Confirming a slot was the only thing that ever sent this email, so a failed
+// send left no way to try again short of re-confirming the whole event.
+window.EVENTS_resendConfirmation = function(eventId) {
+  const ev = S.events.find(e => e.id === eventId);
+  if (!ev) return;
+  if (!ev.confirmedSlot) { toast('This event has no confirmed date yet.', 'warning', 5000); return; }
+
+  const failed = (ev.emailLog || []).filter(e => e.type === 'confirmation' && !e.ok);
+  const recipients = ev.participants.length + (S.user?.email ? 1 : 0);
+
+  modal.open(`
+    <div class="modal-header" style="background:#0B1F3A;border-radius:18px 18px 0 0;">
+      <h3 class="modal-title" style="color:#fff">Resend Confirmation</h3>
+      <button class="modal-close" style="background:rgba(255,255,255,.1);color:#fff;border:none" onclick="closeModal()">&#10005;</button>
+    </div>
+    <div style="padding:24px 28px;">
+      <p style="font-size:.85rem;color:#374151;line-height:1.55;margin:0 0 14px;">
+        Send the confirmation for <strong>${esc(ev.matterName)}</strong> again.
+      </p>
+      ${failed.length ? `<div style="background:#FBE9EC;border-left:3px solid #8B1C2E;border-radius:8px;padding:11px 14px;font-size:.79rem;color:#7F1D1D;line-height:1.5;margin-bottom:14px;">
+        <strong>${failed.length} previous confirmation${failed.length===1?'':'s'} failed to send.</strong>
+        Resending only those avoids a duplicate for anyone who already received theirs.
+      </div>` : ''}
+      <div style="display:flex;flex-direction:column;gap:9px;">
+        ${failed.length ? `<button class="btn btn-primary" onclick="EVENTS_doResendConfirmation('${ev.id}', true)">Resend only the ${failed.length} that failed</button>` : ''}
+        <button class="btn btn-outline" onclick="EVENTS_doResendConfirmation('${ev.id}', false)">Send to everyone (${recipients} recipient${recipients===1?'':'s'})</button>
+      </div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal()">Cancel</button></div>`);
+};
+
+window.EVENTS_doResendConfirmation = async function(eventId, failedOnly) {
+  const ev = S.events.find(e => e.id === eventId);
+  if (!ev) return;
+  modal.close();
+
+  if (failedOnly) {
+    // De-duplicate: one address may have several failed attempts logged.
+    const addrs = [...new Set((ev.emailLog || [])
+      .filter(e => e.type === 'confirmation' && !e.ok)
+      .map(e => e.to))];
+    toast(`Resending confirmation to ${addrs.length} recipient(s)…`, 'info', 3000);
+    const results = await Promise.all(addrs.map(a => EMAIL.sendConfirmation(eventId, a)));
+    EMAIL._summarise(eventId, results.filter(Boolean), 'Confirmation resend');
+  } else {
+    toast('Resending confirmation to all recipients…', 'info', 3000);
+    await EMAIL.sendConfirmation(eventId);
+  }
+  EMAIL._refresh(eventId);
+};
 
 /* ── Retry a failed email ─────────────────────────────── */
 window.EMAIL_retry = async function(eventId, logIdx) {
