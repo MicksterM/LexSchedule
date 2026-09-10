@@ -2601,9 +2601,18 @@ const VIEWS = {
           <div style="font-size:1.6rem;">⚠️</div>
           <div style="flex:1;">
             <div style="font-size:.82rem;font-weight:600;color:#7F1D1D;margin-bottom:3px;">No Mutual Availability Found</div>
-            <div style="font-size:.78rem;color:#991B1B;">All parties have responded but no common date was identified. All participants have been notified. Please restart the process with new proposed dates.</div>
+            <div style="font-size:.78rem;color:#991B1B;">No common date was identified.
+              ${(ev.emailLog||[]).some(e => e.type==='no-match' && e.ok)
+                ? 'All participants have been notified.'
+                : '<strong>Participants have not been notified.</strong>'}
+              Please restart the process with new proposed dates.</div>
           </div>
-          <button onclick="VIEWS.restartModal('${ev.id}')" style="padding:9px 18px;border:none;border-radius:8px;font-size:.74rem;font-weight:700;background:#8B1C2E;color:#fff;cursor:pointer;font-family:'Montserrat',sans-serif;white-space:nowrap;">Restart Process</button>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+            ${(ev.emailLog||[]).some(e => e.type==='no-match' && e.ok)
+              ? ''
+              : `<button onclick="EVENTS_sendNoMatchNotice('${ev.id}')" style="padding:9px 18px;border:1px solid #8B1C2E;border-radius:8px;font-size:.74rem;font-weight:700;background:#fff;color:#8B1C2E;cursor:pointer;font-family:'Montserrat',sans-serif;white-space:nowrap;">Notify Parties</button>`}
+            <button onclick="VIEWS.restartModal('${ev.id}')" style="padding:9px 18px;border:none;border-radius:8px;font-size:.74rem;font-weight:700;background:#8B1C2E;color:#fff;cursor:pointer;font-family:'Montserrat',sans-serif;white-space:nowrap;">Restart Process</button>
+          </div>
         </div>` : ''}
 
       <div style="display:grid;grid-template-columns:1fr 320px;gap:20px;align-items:start;">
@@ -4476,10 +4485,15 @@ window.POLL_setNoMatch = function(eventId) {
     </div>
     <div style="padding:24px 28px;">
       <p style="font-size:.88rem;color:#374151;margin:0 0 14px;">No time slot works for all participants for <strong>${esc(ev.matterName)}</strong>.</p>
-      <p style="font-size:.82rem;color:#6B7280;margin:0 0 22px;">The event will be marked as <em>No Match</em>. You can still manually confirm any slot if needed, or restart the scheduling process.</p>
+      <p style="font-size:.82rem;color:#6B7280;margin:0 0 18px;">The event will be marked as <em>No Match</em>. You can still manually confirm any slot if needed, or restart the scheduling process.</p>
+      <div style="background:#F6F1E9;border-left:3px solid #C09D5F;border-radius:8px;padding:11px 14px;font-size:.79rem;color:#4B5563;line-height:1.5;margin:0 0 20px;">
+        <strong>Mark &amp; Notify</strong> emails all ${ev.participants.length} participant(s) that no common date was found and a new request is coming.
+        <strong>Mark Only</strong> changes the status without contacting anyone.
+      </div>
       <div style="display:flex;gap:10px;justify-content:flex-end;">
         <button onclick="closeModal()" style="padding:9px 20px;border:1px solid #D1D5DB;border-radius:8px;background:#fff;color:#6B7280;font-size:.82rem;font-weight:600;cursor:pointer;font-family:'Montserrat',sans-serif;">Cancel</button>
-        <button onclick="POLL_doNoMatch('${eventId}')" style="padding:9px 22px;border:none;border-radius:8px;background:#8B1C2E;color:#fff;font-size:.82rem;font-weight:700;cursor:pointer;font-family:'Montserrat',sans-serif;">Mark No Match</button>
+        <button onclick="POLL_doNoMatch('${eventId}', false)" style="padding:9px 18px;border:1px solid #D1D5DB;border-radius:8px;background:#fff;color:#6B7280;font-size:.82rem;font-weight:600;cursor:pointer;font-family:'Montserrat',sans-serif;">Mark Only</button>
+        <button onclick="POLL_doNoMatch('${eventId}', true)" style="padding:9px 22px;border:none;border-radius:8px;background:#8B1C2E;color:#fff;font-size:.82rem;font-weight:700;cursor:pointer;font-family:'Montserrat',sans-serif;">Mark &amp; Notify Parties</button>
       </div>
     </div>`);
 };
@@ -4543,15 +4557,32 @@ window.POLL_addBlock = function(eventId, blockId, reopen) {
   VIEWS.eventDetail(eventId);
 };
 
-window.POLL_doNoMatch = function(eventId) {
+window.POLL_doNoMatch = async function(eventId, notify) {
   const ev = S.events.find(e => e.id === eventId);
   if (!ev) return;
   ev.status = 'no-match';
-  EMAIL.addHistory(eventId, 'Marked as no match — no mutually available time slot found');
+  ev.noMatchNotified = !!notify;
+  EMAIL.addHistory(eventId, notify
+    ? 'Marked as no match — notifying all participants'
+    : 'Marked as no match — participants NOT notified');
   STORE.save();
   modal.close();
-  toast('Event marked as No Match.', 'info', 4000);
   VIEWS.eventDetail(eventId);
+  if (notify) {
+    await EMAIL.sendNoMatch(eventId);
+  } else {
+    toast('Marked as No Match. No emails were sent.', 'info', 6000);
+  }
+};
+
+// Send (or resend) the no-match notice on demand.
+window.EVENTS_sendNoMatchNotice = async function(eventId) {
+  const ev = S.events.find(e => e.id === eventId);
+  if (!ev) return;
+  await EMAIL.sendNoMatch(eventId);
+  ev.noMatchNotified = true;
+  STORE.save();
+  EMAIL._refresh(eventId);
 };
 
 // Edit a participant's poll availability on their behalf (admin)
