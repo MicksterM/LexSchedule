@@ -468,8 +468,11 @@ const EMAILJS_DEFAULTS = {
   templateReminder:     'template_wyotfqb',   // proven — reminder delivered
   templateConfirmation: 'template_nf5lmsm',   // read from the template's own URL
   templateNoMatch:      'template_rfgvc9s',   // unproven — never exercised
-  templateWaitlist:     'template_6wlskjg',   // unproven — never exercised
+  templateWaitlist:     'template_6wlskjg',
 };
+
+// Where waitlist signup notifications go.
+const WAITLIST_NOTIFY = { name: 'Mick', email: 'mickm@me.com' };
 
 /* Purge credentials saved by the old Settings screen.
  *
@@ -3302,18 +3305,33 @@ window.WAITLIST_submit = async function() {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner" style="border-color:rgba(11,31,58,.3);border-top-color:#0B1F3A;"></span>';
   try {
-    await db.collection('waitlist').add({ name, email, use: use || '', createdAt: firebase.firestore.FieldValue.serverTimestamp() });
-    // Notify admin
-    EMAIL._send(EMAILJS_CONFIG.templateWaitlist, {
-      to_name:  'Mick',
-      to_email: 'mickm@me.com',
+    // The Firestore record is the durable signup; the email is only a nudge.
+    // Save it first so a mail failure can never lose a lead.
+    const ref = await db.collection('waitlist').add({
+      name, email, use: use || '',
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+
+    // Show success as soon as the signup is stored — the visitor's outcome does
+    // not depend on whether the admin notification gets through.
+    document.getElementById('wl-form-wrap').style.display = 'none';
+    document.getElementById('wl-success').style.display   = 'block';
+
+    // Notify the admin, and record whether that actually worked. Nothing else
+    // would reveal a failure here: this email is not attached to an event, so
+    // it never appears in an Email Delivery panel.
+    const res = await EMAIL._send(EMAILJS_CONFIG.templateWaitlist, {
+      to_name:  WAITLIST_NOTIFY.name,
+      to_email: WAITLIST_NOTIFY.email,
       wl_name:  name,
       wl_email: email,
       wl_use:   use || '(not provided)',
       subject:  'New Waitlist Signup — ' + name
-    }, 'Mick', 'mickm@me.com');
-    document.getElementById('wl-form-wrap').style.display = 'none';
-    document.getElementById('wl-success').style.display   = 'block';
+    }, WAITLIST_NOTIFY.name, WAITLIST_NOTIFY.email);
+
+    ref.update({ notified: res.ok, notifyError: res.ok ? '' : (res.error || 'Unknown error') })
+       .catch(err => console.error('[waitlist] could not record notify status', err));
+    if (!res.ok) console.error('[waitlist] admin notification FAILED —', res.error);
   } catch(e) {
     btn.disabled = false;
     btn.textContent = 'Request Early Access';
