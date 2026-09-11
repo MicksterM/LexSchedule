@@ -1644,7 +1644,7 @@ const VIEWS = {
               </span>
             </div>
             <h1 class="lp-h1" style="font-family:'Cormorant Garamond',serif;font-weight:600;color:#fff;line-height:1.06;margin-bottom:20px;">The Scheduling Platform <em style="color:#C09D5F;font-style:italic;">Built for the Law.</em></h1>
-            <p style="font-size:.98rem;color:rgba(255,255,255,.68);line-height:1.75;margin-bottom:36px;max-width:560px;">Coordinate depositions, mediations, client consultations, and opposing counsel calls with precision. Automated notifications, real-time availability tracking, and professional communications — all in one place.</p>
+            <p style="font-size:.98rem;color:rgba(255,255,255,.68);line-height:1.75;margin-bottom:36px;max-width:560px;">Coordinate and schedule calls, meetings, depositions, mediations, and court events with multiple participants — with incredible ease and precision. Automated notifications, real-time availability tracking, and professional communications, all in one place.</p>
             <div class="lp-cta-row" style="display:flex;gap:14px;flex-wrap:wrap;">
               <button onclick="location.hash='/waitlist'" style="padding:14px 36px;border:none;border-radius:8px;font-size:.84rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;background:#C09D5F;color:#0B1F3A;font-family:'Montserrat',sans-serif;box-shadow:0 4px 16px rgba(192,157,95,.35);">Join the Waitlist</button>
               <button onclick="location.hash='/login'" style="padding:14px 36px;border:1.5px solid rgba(255,255,255,.3);border-radius:8px;font-size:.84rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;background:transparent;color:#fff;font-family:'Montserrat',sans-serif;">Sign In</button>
