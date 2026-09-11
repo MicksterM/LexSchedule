@@ -1666,6 +1666,8 @@ const VIEWS = {
             ['⚖️','Legal-Specific Event Types','Schedule depositions, mediations, opposing counsel calls, client meetings, settlement conferences, and more — with terminology your team and clients expect.'],
             ['📧','Automated Professional Communications','Invitation, reminder, confirmation, and no-match notifications are sent automatically in a format befitting your firm\u2019s reputation.'],
             ['📊','Real-Time Availability Grid','An availability grid tailored for legal proceedings — see at a glance which dates work for all parties and identify the optimal time instantly.'],
+            ['🗂️','Scheduling Dashboard for Every Matter','Track all of your matters in one place. See at a glance which proceedings are active, confirmed, still awaiting responses, or need attention — no chasing across inboxes to work out where each one stands.'],
+            ['🖨️','Printable Activity Log for the File','Every invitation, response, reminder, and confirmation is timestamped in a per-matter activity log. Print it for the file, or attach it to a motion when scheduling itself becomes the issue.'],
             ['✍️','Manual Entry & Override','Enter availability on behalf of non-responsive parties or manually confirm any time slot — full coordinator control at every stage.'],
             ['🔄','Automatic Restart When No Match','If no common time is found, the system notifies all parties and can automatically restart the process with new proposed dates.'],
             ['🔒','Secure, Firm-Branded Experience','Every communication and interface element reflects the professionalism and discretion your clients expect from top-tier legal counsel.'],
