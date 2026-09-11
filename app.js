@@ -307,9 +307,14 @@ const ROUTER = {
     // Public routes
     if (route === 'respond' && parts[0]) { return VIEWS.respond(parts[0], parts[1], parts[2]); }
     if (route === 'cal'     && parts[0]) { return VIEWS.calDownload(parts[0], parts[1]); }
-    if (route === '' || route === 'landing') {
+    // '' is the app's front door: signed-in users belong on the dashboard.
+    // '/landing' is an explicit request for the marketing page, so honour it
+    // even when signed in — otherwise there is no way to show it to anyone
+    // without signing out first.
+    if (route === '') {
       return S.user ? ROUTER.go('/dashboard') : VIEWS.landing();
     }
+    if (route === 'landing') return VIEWS.landing();
     if (route === 'login')    return VIEWS.login();
     if (route === 'register') return VIEWS.register();
     if (route === 'waitlist') return VIEWS.waitlist();
@@ -1550,7 +1555,7 @@ const HEADER = () => `
   </div>
 
   <!-- Logo -->
-  <div style="display:flex;align-items:center;gap:14px;cursor:pointer;flex-shrink:0;position:relative;z-index:1;" onclick="location.hash='/dashboard'">
+  <div style="display:flex;align-items:center;gap:14px;cursor:pointer;flex-shrink:0;position:relative;z-index:1;" onclick="location.hash='/landing'" title="View the public landing page">
     <div style="width:40px;height:40px;border:2px solid #C09D5F;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 0 12px rgba(192,157,95,.25);">
       ${logoSVG(22)}
     </div>
@@ -1602,6 +1607,14 @@ const VIEWS = {
     render(`
     <div style="min-height:100vh;background:#fff;">
       <!-- Nav -->
+      ${S.user ? `
+      <div style="background:#0B1F3A;padding:8px 48px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-family:'Montserrat',sans-serif;">
+        <span style="flex:1;min-width:200px;font-size:.74rem;color:rgba(255,255,255,.6);">
+          Viewing the public landing page &mdash; signed in as <strong style="color:#C09D5F;">${esc(S.user.name || S.user.email || '')}</strong>
+        </span>
+        <button onclick="location.hash='/dashboard'" style="padding:5px 14px;border:1px solid rgba(192,157,95,.5);border-radius:6px;background:transparent;color:#C09D5F;font-size:.7rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;font-family:'Montserrat',sans-serif;white-space:nowrap;">Back to Dashboard</button>
+        <button onclick="AUTH.logout()" style="padding:5px 14px;border:1px solid rgba(255,255,255,.2);border-radius:6px;background:transparent;color:rgba(255,255,255,.7);font-size:.7rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;font-family:'Montserrat',sans-serif;white-space:nowrap;">Sign Out</button>
+      </div>` : ''}
       <nav style="display:flex;align-items:center;justify-content:space-between;padding:18px 48px;background:#fff;border-bottom:1px solid #EDE6D9;position:sticky;top:0;z-index:50;">
         <div style="display:flex;align-items:center;gap:12px;cursor:pointer;" onclick="location.hash='/register'" role="link" tabindex="0" title="Create your LexSchedule account" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();location.hash='/register';}">
           <div style="width:42px;height:42px;border:2px solid #C09D5F;border-radius:50%;display:flex;align-items:center;justify-content:center;">
