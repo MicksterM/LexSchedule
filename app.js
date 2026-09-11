@@ -48,6 +48,110 @@ const greeting = (now = new Date()) => {
   return 'Good evening';
 };
 
+/* ── Time zones ────────────────────────────────────────────
+   Slot times are stored as naive wall-clock strings ('09:00')
+   which only mean something alongside a zone. Every conversion
+   goes through here.
+   ────────────────────────────────────────────────────────── */
+const TZ = {
+  LIST: [
+    ['America/New_York',    'Eastern'],
+    ['America/Chicago',     'Central'],
+    ['America/Denver',      'Mountain'],
+    ['America/Phoenix',     'Arizona (no DST)'],
+    ['America/Los_Angeles', 'Pacific'],
+    ['America/Anchorage',   'Alaska'],
+    ['Pacific/Honolulu',    'Hawaii'],
+    ['America/Puerto_Rico', 'Atlantic / Puerto Rico'],
+  ],
+  DEFAULT: 'America/New_York',
+
+  // The viewer's own zone, or the default when the browser will not say.
+  detect() {
+    try {
+      const z = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      return z || TZ.DEFAULT;
+    } catch (e) { return TZ.DEFAULT; }
+  },
+
+  valid(zone) {
+    if (!zone) return false;
+    try { new Intl.DateTimeFormat('en-US', { timeZone: zone }); return true; }
+    catch (e) { return false; }
+  },
+
+  // Milliseconds to add to an instant to get that zone's wall-clock reading.
+  _offset(instant, zone) {
+    const dtf = new Intl.DateTimeFormat('en-US', {
+      timeZone: zone, hour12: false,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    });
+    const p = {};
+    dtf.formatToParts(instant).forEach(x => { p[x.type] = x.value; });
+    const hour = p.hour === '24' ? 0 : +p.hour;   // some ICU builds emit 24
+    const asUTC = Date.UTC(+p.year, +p.month - 1, +p.day, hour, +p.minute, +p.second);
+    return asUTC - instant.getTime();
+  },
+
+  // '2026-09-15' + '09:00' in `zone` -> the absolute instant it names.
+  toInstant(dateStr, timeStr, zone) {
+    if (!dateStr || !timeStr) return null;
+    const z = TZ.valid(zone) ? zone : TZ.DEFAULT;
+    const naive = new Date(`${dateStr}T${timeStr}:00Z`);
+    if (isNaN(naive)) return null;
+    // One correction lands it; a second settles times near a DST change.
+    let guess = new Date(naive.getTime() - TZ._offset(naive, z));
+    guess = new Date(naive.getTime() - TZ._offset(guess, z));
+    return guess;
+  },
+
+  // 'EDT', 'PST', 'HST' — whatever is correct for that zone on that date.
+  abbr(zone, dateStr, timeStr) {
+    const z = TZ.valid(zone) ? zone : TZ.DEFAULT;
+    const inst = TZ.toInstant(dateStr || '2026-01-15', timeStr || '12:00', z) || new Date();
+    try {
+      const part = new Intl.DateTimeFormat('en-US', { timeZone: z, timeZoneName: 'short' })
+        .formatToParts(inst).find(p => p.type === 'timeZoneName');
+      return part ? part.value : '';
+    } catch (e) { return ''; }
+  },
+
+  // Plain-English name for a zone, for menus and prose.
+  label(zone) {
+    const hit = TZ.LIST.find(([v]) => v === zone);
+    return hit ? hit[1] : (zone || '').split('/').pop().replace(/_/g, ' ');
+  },
+
+  // The same instant read as wall-clock time in another zone.
+  wallClockIn(instant, zone) {
+    const z = TZ.valid(zone) ? zone : TZ.DEFAULT;
+    const p = {};
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: z, hour12: false,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit',
+    }).formatToParts(instant).forEach(x => { p[x.type] = x.value; });
+    const hour = p.hour === '24' ? '00' : p.hour;
+    return { date: `${p.year}-${p.month}-${p.day}`, time: `${hour}:${p.minute}` };
+  },
+
+  // Do two zones show the same wall clock at this moment on this date?
+  sameWallClock(dateStr, timeStr, zoneA, zoneB) {
+    if (!zoneA || !zoneB || zoneA === zoneB) return true;
+    const inst = TZ.toInstant(dateStr, timeStr, zoneA);
+    if (!inst) return true;
+    const w = TZ.wallClockIn(inst, zoneB);
+    return w.date === dateStr && w.time === timeStr;
+  },
+
+  // UTC stamp for calendar files: 20260915T130000Z
+  utcStamp(dateStr, timeStr, zone) {
+    const inst = TZ.toInstant(dateStr, timeStr, zone);
+    return inst ? inst.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '') : '';
+  },
+};
+
 /* ── Firebase ──────────────────────────────────────────── */
 firebase.initializeApp({
   apiKey: "AIzaSyAWAcepKB_7IyiLT8Hs5o5x4BVF6j3L-A8",
@@ -62,6 +166,32 @@ const db     = firebase.firestore();
 const fbAuth = firebase.auth();
 function _firmId() {
   return S?.user?.id || fbAuth.currentUser?.uid || 'unknown';
+}
+
+// The zone the signed-in scheduler works in.
+function _userTZ() {
+  const z = S?.user?.timeZone;
+  return TZ.valid(z) ? z : TZ.detect();
+}
+
+// The zone an event's times are stated in. Frozen on the event at creation so
+// a matter keeps the zone it was booked in even if the scheduler's changes.
+function _eventTZ(ev) {
+  const z = ev && ev.timeZone;
+  return TZ.valid(z) ? z : _userTZ();
+}
+
+// A participant's own local reading of an event time, or '' when their zone
+// shows the same clock. Their zone comes from the browser — never asked for.
+function _localEcho(ev, dateStr, timeStr) {
+  const evZone = _eventTZ(ev);
+  const mine   = TZ.detect();
+  if (!dateStr || !timeStr || TZ.sameWallClock(dateStr, timeStr, evZone, mine)) return '';
+  const inst = TZ.toInstant(dateStr, timeStr, evZone);
+  if (!inst) return '';
+  const w = TZ.wallClockIn(inst, mine);
+  const sameDay = w.date === dateStr;
+  return `${fmtTime(w.time)}${sameDay ? '' : ' on ' + fmtDay(w.date)} your time (${TZ.abbr(mine, dateStr, timeStr)})`;
 }
 
 // Directory the app is served from, with a trailing slash — e.g.
@@ -399,6 +529,7 @@ const ICS = {
       '',
       'Scheduled via LexSchedule',
     ].filter(Boolean).join('\\n');
+    const zone    = _eventTZ(ev);
     const dtStart = ICS._fmt(slot.date, slot.startTime);
     const dtEnd   = ICS._fmt(slot.date, ev.confirmedEndTime || slot.endTime);
     const uid     = `${ev.id}-${slot.id}@lexschedule`;
@@ -412,8 +543,8 @@ const ICS = {
       'BEGIN:VEVENT',
       `UID:${uid}`,
       `DTSTAMP:${now}`,
-      `DTSTART;TZID=America/New_York:${dtStart}`,
-      `DTEND;TZID=America/New_York:${dtEnd}`,
+      `DTSTART;TZID=${zone}:${dtStart}`,
+      `DTEND;TZID=${zone}:${dtEnd}`,
       `SUMMARY:${summary}`,
       `DESCRIPTION:${desc}`,
       (ev.location==='phone'&&ev.phoneNumber) ? `LOCATION:${ev.phoneNumber}${ev.locationDetails?' — '+ev.locationDetails:''}` : ev.locationDetails ? `LOCATION:${ev.locationDetails}` : '',
@@ -427,20 +558,25 @@ const ICS = {
   googleCalUrl(ev, slot) {
     const et      = EVENT_TYPES[ev.type] || {};
     const title   = encodeURIComponent(`${et.label||ev.type}: ${ev.matterName}`);
-    const dtStart = ICS._fmt(slot.date, slot.startTime);
-    const dtEnd   = ICS._fmt(slot.date, ev.confirmedEndTime || slot.endTime);
+    const zone    = _eventTZ(ev);
+    const dtStart = TZ.utcStamp(slot.date, slot.startTime, zone);
+    const dtEnd   = TZ.utcStamp(slot.date, ev.confirmedEndTime || slot.endTime, zone);
     const details = encodeURIComponent(`Proceeding Type: ${et.label||ev.type}\nCase No.: ${ev.caseNumber||'N/A'}\nScheduled via LexSchedule`);
     const loc     = encodeURIComponent(ev.locationDetails||'');
-    return `https://www.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dtStart}/${dtEnd}&details=${details}&location=${loc}`;
+    return `https://www.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${dtStart}/${dtEnd}&ctz=${encodeURIComponent(zone)}&details=${details}&location=${loc}`;
   },
   outlookUrl(ev, slot) {
     const et       = EVENT_TYPES[ev.type] || {};
     const subject  = encodeURIComponent(`${et.label||ev.type}: ${ev.matterName}`);
     const body     = encodeURIComponent(`Proceeding Type: ${et.label||ev.type}\r\nCase No.: ${ev.caseNumber||'N/A'}\r\nScheduled via LexSchedule`);
     const loc      = encodeURIComponent(ev.locationDetails||'');
-    const [y,m,d]  = slot.date.split('-');
-    const startISO = `${y}-${m}-${d}T${slot.startTime}:00`;
-    const endISO   = `${y}-${m}-${d}T${ev.confirmedEndTime || slot.endTime}:00`;
+    const zone     = _eventTZ(ev);
+    const iso      = (t) => {
+      const inst = TZ.toInstant(slot.date, t, zone);
+      return inst ? inst.toISOString().replace(/\.\d{3}Z$/, 'Z') : '';
+    };
+    const startISO = iso(slot.startTime);
+    const endISO   = iso(ev.confirmedEndTime || slot.endTime);
     return `https://outlook.live.com/calendar/0/deeplink/compose?subject=${subject}&startdt=${startISO}&enddt=${endISO}&body=${body}&location=${loc}`;
   },
   download(ev, slot) {
@@ -733,14 +869,18 @@ const EMAIL = {
       const end    = fmtDate(dates[dates.length - 1]);
       const label  = POLL.blocksLabel(POLL.usedBlocks(ev), '&amp;');
       const durLabel = POLL.fmtDuration(POLL.duration(ev));
-      return `<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #EDE6D9;border-radius:6px;background:#ffffff;"><tr><td style="padding:10px 14px;font-size:13px;color:#374151;">Please indicate your availability between <strong>${start}</strong> and <strong>${end}</strong> (${label}).<br><br>This meeting is expected to take <strong>${durLabel}</strong>. You will mark 30-minute blocks &mdash; consecutive blocks are combined, so please mark every block you are free.</td></tr></table>`;
+      const pollZone = _eventTZ(ev);
+      return `<table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #EDE6D9;border-radius:6px;background:#ffffff;"><tr><td style="padding:10px 14px;font-size:13px;color:#374151;">Please indicate your availability between <strong>${start}</strong> and <strong>${end}</strong> (${label}), stated in ${TZ.label(pollZone)} time (${TZ.abbr(pollZone, dates[0], '12:00')}).<br><br>This meeting is expected to take <strong>${durLabel}</strong>. You will mark 30-minute blocks &mdash; consecutive blocks are combined, so please mark every block you are free.</td></tr></table>`;
     }
-    return ev.proposedSlots.map(s =>
+    const zone = _eventTZ(ev);
+    const rows = ev.proposedSlots.map(s =>
       `<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:5px;border:1px solid #EDE6D9;border-radius:6px;background:#ffffff;">` +
       `<tr><td style="padding:9px 14px;font-size:13px;font-weight:600;color:#0B1F3A;">${fmtDate(s.date)}</td>` +
-      `<td style="padding:9px 14px;font-size:12px;color:#6B7280;text-align:right;white-space:nowrap;">${fmtTime(s.startTime)} – ${fmtTime(s.endTime)}</td></tr>` +
+      `<td style="padding:9px 14px;font-size:12px;color:#6B7280;text-align:right;white-space:nowrap;">${fmtTime(s.startTime)} – ${fmtTime(s.endTime)} ${TZ.abbr(zone, s.date, s.startTime)}</td></tr>` +
       `</table>`
     ).join('');
+    const first = ev.proposedSlots[0];
+    return rows + `<p style="font-size:12px;color:#6B7280;margin:8px 0 0;">All times are ${TZ.label(zone)} time (${TZ.abbr(zone, first && first.date, first && first.startTime)}). Your response page shows each time in your own time zone as well.</p>`;
   },
 
   // Build the Apple Calendar ICS download URL for a confirmed event.
@@ -841,7 +981,7 @@ const EMAIL = {
       matter_name:     ev.matterName,
       event_type:      et.label || ev.type,
       confirmed_date:  slot ? fmtDate(slot.date) : 'To Be Confirmed',
-      confirmed_time:  slot ? `${fmtTime(slot.startTime)} \u2013 ${fmtTime(ev.confirmedEndTime || slot.endTime)} Eastern` : '',
+      confirmed_time:  slot ? `${fmtTime(slot.startTime)} \u2013 ${fmtTime(ev.confirmedEndTime || slot.endTime)} ${TZ.abbr(_eventTZ(ev), slot.date, slot.startTime)}` : '',
       location:        ev.location==='phone'&&ev.phoneNumber ? `📞 ${ev.phoneNumber}${ev.locationDetails?' — '+ev.locationDetails:''}` : ev.locationDetails || 'To be provided',
       firm_name:       S.user?.firm || 'LexSchedule',
       firm_address:    S.user?.firmAddress || '',
@@ -992,7 +1132,7 @@ const EMAIL = {
           <div class="email-preview-detail-row"><span class="email-preview-detail-label">Matter:</span><span class="email-preview-detail-value">${esc(ev.matterName)}</span></div>
           <div class="email-preview-detail-row"><span class="email-preview-detail-label">Proceeding Type:</span><span class="email-preview-detail-value">${et.label||''}</span></div>
           <div class="email-preview-detail-row"><span class="email-preview-detail-label">Confirmed Date:</span><span class="email-preview-detail-value">${slot ? fmtDate(slot.date) : 'To Be Confirmed'}</span></div>
-          <div class="email-preview-detail-row"><span class="email-preview-detail-label">Time:</span><span class="email-preview-detail-value">${slot ? `${fmtTime(slot.startTime)} – ${fmtTime(ev.confirmedEndTime || slot.endTime)}` : ''} (Eastern)</span></div>
+          <div class="email-preview-detail-row"><span class="email-preview-detail-label">Time:</span><span class="email-preview-detail-value">${slot ? `${fmtTime(slot.startTime)} – ${fmtTime(ev.confirmedEndTime || slot.endTime)} ${TZ.abbr(_eventTZ(ev), slot.date, slot.startTime)}` : ''}</span></div>
           <div class="email-preview-detail-row"><span class="email-preview-detail-label">Location:</span><span class="email-preview-detail-value">${esc(ev.location==='phone'&&ev.phoneNumber?`📞 ${ev.phoneNumber}${ev.locationDetails?' — '+ev.locationDetails:''}`:ev.locationDetails||'To be provided')}</span></div>
         </div>
         <p>Please do not hesitate to contact our office if you have any questions or require any accommodations.</p>
@@ -1518,6 +1658,7 @@ const AUTH = {
         assistantFor: data.assistantFor || '',
         barNumber: data.barNumber || '', firm: data.firm || '',
         firmAddress: '', firmFax: '',
+        timeZone: TZ.valid(data.timeZone) ? data.timeZone : TZ.detect(),
         createdAt: Date.now()
       };
       await db.collection('userProfiles').doc(cred.user.uid).set(profile);
@@ -1928,6 +2069,13 @@ const VIEWS = {
           <div>
             <div style="font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#9CA3AF;margin-bottom:4px;">Firm Address (shown in emails)</div>
             <input id="acct-address" type="text" value="${esc(S.user?.firmAddress||'')}" placeholder="e.g. 1234 Main St, Suite 100, Naples, FL 34102" style="width:100%;padding:8px 12px;border:1.5px solid #D5CCBA;border-radius:7px;font-size:.84rem;font-family:'Montserrat',sans-serif;outline:none;box-sizing:border-box;" onfocus="this.style.borderColor='#0B1F3A'" onblur="this.style.borderColor='#D5CCBA'">
+          </div>
+          <div>
+            <div style="font-size:.7rem;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#9CA3AF;margin-bottom:4px;">Time Zone</div>
+            <select id="acct-tz" style="width:100%;padding:8px 12px;border:1.5px solid #D5CCBA;border-radius:7px;font-size:.84rem;font-family:'Montserrat',sans-serif;outline:none;box-sizing:border-box;background:#fff;">
+              ${TZ.LIST.map(([value, label]) => `<option value="${value}"${value === _userTZ() ? ' selected' : ''}>${label} — ${TZ.abbr(value)}</option>`).join('')}
+            </select>
+            <p style="font-size:.72rem;color:#9CA3AF;margin-top:4px;line-height:1.5;">Applies to matters you schedule from now on. Existing matters keep the zone they were created in.</p>
           </div>
           <button onclick="VIEWS_saveAccountContact()" style="align-self:flex-start;padding:8px 16px;border:none;border-radius:7px;background:#0B1F3A;color:#C09D5F;font-size:.76rem;font-weight:700;cursor:pointer;font-family:'Montserrat',sans-serif;white-space:nowrap;">Save Contact Info</button>
         </div>
@@ -2633,7 +2781,7 @@ const VIEWS = {
           <div>
             <div style="font-size:.62rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#C09D5F;margin-bottom:4px;">Confirmed Meeting Date</div>
             <div style="font-family:'Cormorant Garamond',serif;font-size:1.5rem;font-weight:600;color:#fff;">${fmtDate(confirmed.date)}</div>
-            <div style="font-size:.84rem;color:rgba(255,255,255,.65);margin-top:3px;">${fmtTime(confirmed.startTime)} – ${fmtTime(ev.confirmedEndTime || confirmed.endTime)} Eastern · ${esc(ev.location==='phone'&&ev.phoneNumber ? '📞 '+ev.phoneNumber : ev.locationDetails||ev.location)}</div>
+            <div style="font-size:.84rem;color:rgba(255,255,255,.65);margin-top:3px;">${fmtTime(confirmed.startTime)} – ${fmtTime(ev.confirmedEndTime || confirmed.endTime)} ${TZ.abbr(_eventTZ(ev), confirmed.date, confirmed.startTime)} · ${esc(ev.location==='phone'&&ev.phoneNumber ? '📞 '+ev.phoneNumber : ev.locationDetails||ev.location)}</div>
           </div>
           <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
             <button onclick="EMAIL.previewModal('${ev.id}','confirmation')" style="padding:9px 18px;border:1px solid rgba(192,157,95,.5);border-radius:8px;font-size:.74rem;font-weight:600;background:transparent;color:#C09D5F;cursor:pointer;font-family:'Montserrat',sans-serif;white-space:nowrap;">View Confirmation Email</button>
@@ -3245,7 +3393,8 @@ const VIEWS = {
             const labels  = { available:'Available', unavailable:'Unavailable', maybe:'If Necessary', '':'Click to Select' };
             return `<div class="respond-slot-card ${classes[cur]}" onclick="RESPOND_toggleSlot('${token}','${s.id}','${ev.id}')" id="rsc-${s.id}">
               <div class="rs-date">${new Date(s.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</div>
-              <div class="rs-time">${fmtTime(s.startTime)} – ${fmtTime(s.endTime)}</div>
+              <div class="rs-time">${fmtTime(s.startTime)} – ${fmtTime(s.endTime)} ${TZ.abbr(_eventTZ(ev), s.date, s.startTime)}</div>
+              ${_localEcho(ev, s.date, s.startTime) ? `<div style="font-size:.72rem;color:#6B7280;margin-top:2px;">${esc(_localEcho(ev, s.date, s.startTime))}</div>` : ''}
               <div class="rs-status" style="color:${cur==='available'?'#065F46':cur==='unavailable'?'#8B1C2E':cur==='maybe'?'#92400E':'#9CA3AF'};">${cur?AVAIL_ICON[cur]+' ':''} ${labels[cur]}</div>
             </div>`;
           }).join('')}
@@ -3276,7 +3425,7 @@ const VIEWS = {
           <div style="background:linear-gradient(135deg,#0B1F3A,#162d52);border:2px solid #C09D5F;border-radius:12px;padding:20px 24px;margin:20px 0;text-align:left;">
             <div style="font-size:.62rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#C09D5F;margin-bottom:6px;">Confirmed Date & Time</div>
             <div style="font-family:'Cormorant Garamond',serif;font-size:1.5rem;font-weight:600;color:#fff;">${fmtDate(confirmed.date)}</div>
-            <div style="font-size:.84rem;color:rgba(255,255,255,.65);margin-top:4px;">${fmtTime(confirmed.startTime)} – ${fmtTime(ev.confirmedEndTime || confirmed.endTime)} Eastern</div>
+            <div style="font-size:.84rem;color:rgba(255,255,255,.65);margin-top:4px;">${fmtTime(confirmed.startTime)} – ${fmtTime(ev.confirmedEndTime || confirmed.endTime)} ${TZ.abbr(_eventTZ(ev), confirmed.date, confirmed.startTime)}${_localEcho(ev, confirmed.date, confirmed.startTime) ? ` &middot; ${esc(_localEcho(ev, confirmed.date, confirmed.startTime))}` : ''}</div>
             ${ev.location==='phone'&&ev.phoneNumber?`<div style="font-size:.82rem;color:rgba(255,255,255,.65);margin-top:4px;">📞 ${esc(ev.phoneNumber)}</div>`:''}
             ${ev.locationDetails?`<div style="font-size:.82rem;color:rgba(255,255,255,.55);margin-top:4px;">📍 ${esc(ev.locationDetails)}</div>`:''}
           </div>` : `
@@ -3423,11 +3572,13 @@ window.VIEWS_saveAccountContact = function() {
   const phone   = document.getElementById('acct-phone')?.value.trim() || '';
   const fax     = document.getElementById('acct-fax')?.value.trim() || '';
   const address = document.getElementById('acct-address')?.value.trim() || '';
+  const tz      = document.getElementById('acct-tz')?.value || '';
   if (S.user) {
     S.user.firm = firm;
     S.user.phone = phone;
     S.user.firmFax = fax;
     S.user.firmAddress = address;
+    if (TZ.valid(tz)) S.user.timeZone = tz;
     db.collection('userProfiles').doc(S.user.id).set(S.user).catch(console.error);
     toast('Contact info saved.', 'success', 3000);
   }
@@ -3443,6 +3594,7 @@ window.AUTH_register = async function() {
   const asstFor      = document.getElementById('r-assistant-for')?.value.trim();
   const asstTitle    = document.getElementById('r-asst-title')?.value.trim();
   const firm         = document.getElementById('r-firm')?.value.trim();
+  const timeZone     = document.getElementById('r-tz')?.value || TZ.detect();
   const pass         = document.getElementById('r-pass')?.value;
   const pass2        = document.getElementById('r-pass2')?.value;
   const terms        = document.getElementById('r-terms')?.checked;
@@ -3473,6 +3625,7 @@ window.AUTH_register = async function() {
     assistantFor: roleType === 'Assistant' ? asstFor : '',
     barNumber: roleType === 'Attorney' ? bar : '',
     firm: firm || '',
+    timeZone,
     password: pass,
   });
 
@@ -3898,6 +4051,7 @@ window.CREATE_submit = function() {
     status: 'active',
     createdBy: S.user.id,
     createdAt: Date.now(),
+    timeZone: _userTZ(),
     deadline: cd.deadline ? new Date(cd.deadline).getTime() : null,
     location: cd.location,
     locationDetails: cd.locationDetails,
