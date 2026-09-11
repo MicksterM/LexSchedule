@@ -1603,7 +1603,7 @@ const VIEWS = {
     <div style="min-height:100vh;background:#fff;">
       <!-- Nav -->
       <nav style="display:flex;align-items:center;justify-content:space-between;padding:18px 48px;background:#fff;border-bottom:1px solid #EDE6D9;position:sticky;top:0;z-index:50;">
-        <div style="display:flex;align-items:center;gap:12px;">
+        <div style="display:flex;align-items:center;gap:12px;cursor:pointer;" onclick="location.hash='/register'" role="link" tabindex="0" title="Create your LexSchedule account" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();location.hash='/register';}">
           <div style="width:42px;height:42px;border:2px solid #C09D5F;border-radius:50%;display:flex;align-items:center;justify-content:center;">
             ${logoSVG(24)}
           </div>
@@ -1687,7 +1687,7 @@ const VIEWS = {
     <div style="min-height:100vh;background:#0B1F3A;display:flex;flex-direction:column;">
       <!-- Nav -->
       <nav style="display:flex;align-items:center;justify-content:space-between;padding:18px 48px;border-bottom:1px solid rgba(192,157,95,.15);">
-        <a onclick="location.hash='/'" style="display:flex;align-items:center;gap:12px;cursor:pointer;text-decoration:none;">
+        <a onclick="location.hash='/register'" title="Create your LexSchedule account" style="display:flex;align-items:center;gap:12px;cursor:pointer;text-decoration:none;">
           <div style="width:38px;height:38px;border:1.5px solid #C09D5F;border-radius:50%;display:flex;align-items:center;justify-content:center;">${logoSVG(22)}</div>
           <div style="font-family:'Cormorant Garamond',serif;font-size:1.3rem;font-weight:700;color:#fff;letter-spacing:.02em;">LexSchedule</div>
         </a>
@@ -1739,7 +1739,7 @@ const VIEWS = {
       <div style="background:#0B1F3A;padding:64px;display:flex;flex-direction:column;justify-content:center;position:relative;overflow:hidden;">
         <div style="position:absolute;inset:0;opacity:.04;background-image:url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2260%22 height=%2260%22><circle cx=%2230%22 cy=%2230%22 r=%221%22 fill=%22%23C09D5F%22/></svg>');background-size:30px 30px;"></div>
         <div style="position:relative;z-index:1;">
-          <div style="width:68px;height:68px;border:2px solid #C09D5F;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:28px;">
+          <div style="width:68px;height:68px;border:2px solid #C09D5F;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:28px;cursor:pointer;" onclick="location.hash='/register'" role="link" tabindex="0" title="Create your LexSchedule account" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();location.hash='/register';}">
             ${logoSVG(40)}
           </div>
           <div style="font-family:'Cormorant Garamond',serif;font-size:2.6rem;font-weight:700;color:#fff;line-height:1.1;margin-bottom:6px;letter-spacing:.01em;">LexSchedule</div>
@@ -3259,7 +3259,7 @@ const VIEWS = {
       <div style="background:#0B1F3A;padding:64px;display:flex;flex-direction:column;justify-content:center;position:relative;overflow:hidden;">
         <div style="position:absolute;inset:0;opacity:.04;background-image:url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2260%22 height=%2260%22><circle cx=%2230%22 cy=%2230%22 r=%221%22 fill=%22%23C09D5F%22/></svg>');background-size:30px 30px;"></div>
         <div style="position:relative;z-index:1;">
-          <div style="width:68px;height:68px;border:2px solid #C09D5F;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:28px;">
+          <div style="width:68px;height:68px;border:2px solid #C09D5F;border-radius:50%;display:flex;align-items:center;justify-content:center;margin-bottom:28px;cursor:pointer;" onclick="location.hash='/register'" role="link" tabindex="0" title="Create your LexSchedule account" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();location.hash='/register';}">
             ${logoSVG(40)}
           </div>
           <div style="font-family:'Cormorant Garamond',serif;font-size:2.6rem;font-weight:700;color:#fff;line-height:1.1;margin-bottom:6px;">LexSchedule</div>
