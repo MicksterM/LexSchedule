@@ -479,6 +479,22 @@ const EMAILJS_DEFAULTS = {
 // Where waitlist signup notifications go.
 const WAITLIST_NOTIFY = { name: 'Mick', email: 'mickm@me.com' };
 
+/* Who may create an account.
+ * Registration is normally limited to the firm's own domain. Named
+ * addresses below are individually approved exceptions — early testers
+ * outside the firm. Add an address here, commit, and they can register;
+ * remove it and they cannot create a new account, though any account
+ * they already made continues to work.
+ */
+const REGISTRATION_DOMAIN = '@lawfirmnaples.com';
+const REGISTRATION_ALLOWLIST = [
+  'psmoore@gmail.com',
+];
+const mayRegister = email => {
+  const e = (email || '').trim().toLowerCase();
+  return e.endsWith(REGISTRATION_DOMAIN) || REGISTRATION_ALLOWLIST.includes(e);
+};
+
 /* Purge credentials saved by the old Settings screen.
  *
  * Those were entered by hand, are known to contain wrong template IDs, and
@@ -3286,7 +3302,7 @@ const VIEWS = {
             <div style="font-size:2.2rem;margin-bottom:12px;">📧</div>
             <div style="font-family:'Cormorant Garamond',serif;font-size:1.3rem;color:#fff;font-weight:600;margin-bottom:8px;">Verify Your Identity</div>
             <p style="font-size:.82rem;color:rgba(255,255,255,.65);line-height:1.6;">A verification link has been sent to your firm email address. Click the link to activate your account.</p>
-            <p style="font-size:.78rem;color:rgba(192,157,95,.85);margin-top:12px;line-height:1.5;">Only <strong style="color:#C09D5F;">@lawfirmnaples.com</strong> email addresses are authorized to access LexSchedule.</p>
+            <p style="font-size:.78rem;color:rgba(192,157,95,.85);margin-top:12px;line-height:1.5;"><strong style="color:#C09D5F;">${REGISTRATION_DOMAIN}</strong> email addresses, and individually approved accounts, are authorized to access LexSchedule.</p>
           </div>
         </div>
       </div>
@@ -3426,7 +3442,7 @@ window.AUTH_register = async function() {
   const showErr = msg => { errEl.style.display='flex'; errEl.textContent=msg; };
 
   if (!name || !email || !roleType || !pass) return showErr('Please fill in all required fields and select a role.');
-  if (!email.toLowerCase().endsWith('@lawfirmnaples.com')) return showErr('Registration is restricted to @lawfirmnaples.com email addresses.');
+  if (!mayRegister(email)) return showErr(`Registration is restricted to ${REGISTRATION_DOMAIN} email addresses and individually approved accounts.`);
   if (roleType === 'Assistant' && !asstFor) return showErr('Please enter the name of the attorney you assist.');
   if (pass.length < 8) return showErr('Password must be at least 8 characters.');
   if (pass !== pass2) return showErr('Passwords do not match. Please try again.');
