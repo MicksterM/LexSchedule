@@ -1608,14 +1608,14 @@ const VIEWS = {
     <div style="min-height:100vh;background:#fff;">
       <!-- Nav -->
       ${S.user ? `
-      <div style="background:#0B1F3A;padding:8px 48px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-family:'Montserrat',sans-serif;">
+      <div class="lp-userbar" style="background:#0B1F3A;display:flex;align-items:center;gap:12px;flex-wrap:wrap;font-family:'Montserrat',sans-serif;">
         <span style="flex:1;min-width:200px;font-size:.74rem;color:rgba(255,255,255,.6);">
           Viewing the public landing page &mdash; signed in as <strong style="color:#C09D5F;">${esc(S.user.name || S.user.email || '')}</strong>
         </span>
         <button onclick="location.hash='/dashboard'" style="padding:5px 14px;border:1px solid rgba(192,157,95,.5);border-radius:6px;background:transparent;color:#C09D5F;font-size:.7rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;font-family:'Montserrat',sans-serif;white-space:nowrap;">Back to Dashboard</button>
         <button onclick="AUTH.logout()" style="padding:5px 14px;border:1px solid rgba(255,255,255,.2);border-radius:6px;background:transparent;color:rgba(255,255,255,.7);font-size:.7rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;cursor:pointer;font-family:'Montserrat',sans-serif;white-space:nowrap;">Sign Out</button>
       </div>` : ''}
-      <nav style="display:flex;align-items:center;justify-content:space-between;padding:18px 48px;background:#fff;border-bottom:1px solid #EDE6D9;position:sticky;top:0;z-index:50;">
+      <nav class="lp-nav" style="display:flex;align-items:center;justify-content:space-between;background:#fff;border-bottom:1px solid #EDE6D9;position:sticky;top:0;z-index:50;">
         <div style="display:flex;align-items:center;gap:12px;cursor:pointer;" onclick="location.hash='/register'" role="link" tabindex="0" title="Create your LexSchedule account" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();location.hash='/register';}">
           <div style="width:42px;height:42px;border:2px solid #C09D5F;border-radius:50%;display:flex;align-items:center;justify-content:center;">
             ${logoSVG(24)}
@@ -1628,7 +1628,7 @@ const VIEWS = {
         </div>
       </nav>
       <!-- Hero -->
-      <section style="background:#0B1F3A;padding:96px 48px;position:relative;overflow:hidden;">
+      <section class="lp-hero" style="background:#0B1F3A;position:relative;overflow:hidden;">
         <div style="position:absolute;inset:0;opacity:.04;background-image:url('data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2260%22 height=%2260%22><circle cx=%2230%22 cy=%2230%22 r=%221%22 fill=%22%23C09D5F%22/></svg>');background-size:30px 30px;"></div>
         <div style="display:flex;align-items:center;justify-content:space-between;gap:48px;position:relative;z-index:1;max-width:1200px;">
           <div style="flex:1;min-width:0;max-width:760px;">
@@ -1643,9 +1643,9 @@ const VIEWS = {
                 Now in Early Testing
               </span>
             </div>
-            <h1 style="font-family:'Cormorant Garamond',serif;font-size:3.8rem;font-weight:600;color:#fff;line-height:1.06;margin-bottom:20px;">The Scheduling Platform <em style="color:#C09D5F;font-style:italic;">Built for the Law.</em></h1>
+            <h1 class="lp-h1" style="font-family:'Cormorant Garamond',serif;font-weight:600;color:#fff;line-height:1.06;margin-bottom:20px;">The Scheduling Platform <em style="color:#C09D5F;font-style:italic;">Built for the Law.</em></h1>
             <p style="font-size:.98rem;color:rgba(255,255,255,.68);line-height:1.75;margin-bottom:36px;max-width:560px;">Coordinate depositions, mediations, client consultations, and opposing counsel calls with precision. Automated notifications, real-time availability tracking, and professional communications — all in one place.</p>
-            <div style="display:flex;gap:14px;flex-wrap:wrap;">
+            <div class="lp-cta-row" style="display:flex;gap:14px;flex-wrap:wrap;">
               <button onclick="location.hash='/waitlist'" style="padding:14px 36px;border:none;border-radius:8px;font-size:.84rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;background:#C09D5F;color:#0B1F3A;font-family:'Montserrat',sans-serif;box-shadow:0 4px 16px rgba(192,157,95,.35);">Join the Waitlist</button>
               <button onclick="location.hash='/login'" style="padding:14px 36px;border:1.5px solid rgba(255,255,255,.3);border-radius:8px;font-size:.84rem;font-weight:600;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;background:transparent;color:#fff;font-family:'Montserrat',sans-serif;">Sign In</button>
             </div>
@@ -1656,12 +1656,12 @@ const VIEWS = {
         </div>
       </section>
       <!-- Features -->
-      <section style="padding:80px 48px;background:#fff;">
+      <section class="lp-section" style="background:#fff;">
         <div style="text-align:center;max-width:560px;margin:0 auto 56px;">
           <div style="font-size:.68rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:#9e7e3f;margin-bottom:12px;">Platform Capabilities</div>
-          <h2 style="font-family:'Cormorant Garamond',serif;font-size:2.4rem;font-weight:600;color:#0B1F3A;margin-bottom:12px;">Everything a Law Firm Needs to Schedule Professionally</h2>
+          <h2 class="lp-h2" style="font-family:'Cormorant Garamond',serif;font-weight:600;color:#0B1F3A;margin-bottom:12px;">Everything a Law Firm Needs to Schedule Professionally</h2>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px;max-width:1100px;margin:0 auto;">
+        <div class="lp-features" style="max-width:1100px;margin:0 auto;">
           ${[
             ['⚖️','Legal-Specific Event Types','Schedule depositions, mediations, opposing counsel calls, client meetings, settlement conferences, and more — with terminology your team and clients expect.'],
             ['📧','Automated Professional Communications','Invitation, reminder, confirmation, and no-match notifications are sent automatically in a format befitting your firm\u2019s reputation.'],
@@ -1670,7 +1670,7 @@ const VIEWS = {
             ['🔄','Automatic Restart When No Match','If no common time is found, the system notifies all parties and can automatically restart the process with new proposed dates.'],
             ['🔒','Secure, Firm-Branded Experience','Every communication and interface element reflects the professionalism and discretion your clients expect from top-tier legal counsel.'],
           ].map(([icon,title,desc])=>`
-            <div style="background:#fff;border:1px solid #EDE6D9;border-radius:14px;padding:28px;box-shadow:0 1px 4px rgba(11,31,58,.06);transition:all .3s;" onmouseover="this.style.boxShadow='0 8px 24px rgba(11,31,58,.1)';this.style.transform='translateY(-4px)'" onmouseout="this.style.boxShadow='0 1px 4px rgba(11,31,58,.06)';this.style.transform=''">
+            <div class="lp-card" style="background:#fff;border:1px solid #EDE6D9;border-radius:14px;box-shadow:0 1px 4px rgba(11,31,58,.06);transition:all .3s;" onmouseover="this.style.boxShadow='0 8px 24px rgba(11,31,58,.1)';this.style.transform='translateY(-4px)'" onmouseout="this.style.boxShadow='0 1px 4px rgba(11,31,58,.06)';this.style.transform=''">
               <div style="width:50px;height:50px;background:#0B1F3A;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.4rem;margin-bottom:16px;">${icon}</div>
               <div style="font-family:'Cormorant Garamond',serif;font-size:1.25rem;font-weight:600;color:#0B1F3A;margin-bottom:10px;">${title}</div>
               <p style="font-size:.84rem;color:#4B5563;line-height:1.7;">${desc}</p>
@@ -1679,13 +1679,13 @@ const VIEWS = {
         </div>
       </section>
       <!-- CTA Banner -->
-      <section style="background:#F6F1E9;padding:60px 48px;text-align:center;border-top:1px solid #EDE6D9;border-bottom:1px solid #EDE6D9;">
-        <h2 style="font-family:'Cormorant Garamond',serif;font-size:2.2rem;font-weight:600;color:#0B1F3A;margin-bottom:12px;">Ready to streamline your scheduling?</h2>
+      <section class="lp-cta" style="background:#F6F1E9;text-align:center;border-top:1px solid #EDE6D9;border-bottom:1px solid #EDE6D9;">
+        <h2 class="lp-h2" style="font-family:'Cormorant Garamond',serif;font-weight:600;color:#0B1F3A;margin-bottom:12px;">Ready to streamline your scheduling?</h2>
         <p style="font-size:.9rem;color:#6B7280;margin-bottom:28px;">Built for attorneys and legal professionals who demand precision.</p>
         <button onclick="location.hash='/waitlist'" style="padding:14px 40px;border:none;border-radius:8px;font-size:.84rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;background:#0B1F3A;color:#fff;font-family:'Montserrat',sans-serif;box-shadow:0 4px 12px rgba(11,31,58,.2);">Join the Waitlist</button>
       </section>
       <!-- Footer -->
-      <footer style="background:#0B1F3A;padding:36px 48px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;">
+      <footer class="lp-footer" style="background:#0B1F3A;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;">
         <div>
           <div style="font-family:'Cormorant Garamond',serif;font-size:1.2rem;font-weight:700;color:#fff;letter-spacing:.02em;">LexSchedule</div>
           <div style="font-size:.72rem;color:rgba(255,255,255,.45);margin-top:3px;">Professional Legal Scheduling</div>

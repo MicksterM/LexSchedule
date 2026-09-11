@@ -1810,3 +1810,66 @@ textarea.form-control { resize: vertical; min-height: 100px; }
 }
 
 .scrollable-x { overflow-x: auto; }
+
+/* ── Landing page ────────────────────────────────────────────
+   The landing markup is built from inline styles, which a media
+   query cannot override. Every property that has to change with
+   viewport width lives here instead, so these rules are the sole
+   owner of landing spacing, headline size and grid columns.
+   ──────────────────────────────────────────────────────────── */
+.lp-nav      { padding: 18px 48px; }
+.lp-userbar  { padding: 8px 48px; }
+.lp-hero     { padding: 96px 48px; }
+.lp-section  { padding: 80px 48px; }
+.lp-cta      { padding: 60px 48px; }
+.lp-footer   { padding: 36px 48px; }
+.lp-card     { padding: 28px; }
+.lp-h1       { font-size: 3.8rem; }
+.lp-h2       { font-size: 2.4rem; }
+.lp-features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+
+/* Tablet — two feature columns, tighter gutters */
+@media (max-width: 1024px) {
+  .lp-nav      { padding: 16px 32px; }
+  .lp-userbar  { padding: 8px 32px; }
+  .lp-hero     { padding: 72px 32px; }
+  .lp-section  { padding: 64px 32px; }
+  .lp-cta      { padding: 52px 32px; }
+  .lp-footer   { padding: 32px 32px; }
+  .lp-h1       { font-size: 2.9rem; }
+  .lp-h2       { font-size: 2.1rem; }
+  .lp-features { grid-template-columns: repeat(2, 1fr); gap: 20px; }
+}
+
+/* Phone — single column, full-width actions */
+@media (max-width: 768px) {
+  .lp-nav      { padding: 14px 20px; gap: 12px; }
+  .lp-userbar  { padding: 8px 20px; }
+  .lp-hero     { padding: 52px 20px; }
+  .lp-section  { padding: 48px 20px; }
+  .lp-cta      { padding: 44px 20px; }
+  .lp-footer   { padding: 26px 20px; }
+  .lp-card     { padding: 22px; }
+  .lp-h1       { font-size: 2.25rem; line-height: 1.14; }
+  .lp-h2       { font-size: 1.7rem; }
+  .lp-features { grid-template-columns: 1fr; gap: 14px; }
+
+  /* Stacked, full-width buttons beat a cramped two-across row. */
+  .lp-cta-row  { flex-direction: column; align-items: stretch; gap: 10px; }
+  .lp-cta-row > button { width: 100%; padding-left: 20px; padding-right: 20px; }
+
+  /* Footer reads better stacked than squeezed onto one line. */
+  .lp-footer   { flex-direction: column; align-items: flex-start; gap: 12px; }
+}
+
+/* Small phone — the nav wordmark competes with the buttons for width */
+@media (max-width: 480px) {
+  .lp-hero { padding: 44px 16px; }
+  .lp-nav, .lp-userbar, .lp-section, .lp-cta, .lp-footer {
+    padding-left: 16px; padding-right: 16px;
+  }
+  .lp-h1 { font-size: 1.95rem; }
+  .lp-h2 { font-size: 1.5rem; }
+  .lp-nav > div:last-child { gap: 8px; }
+  .lp-nav > div:last-child > button { padding: 8px 14px; font-size: .72rem; }
+}
