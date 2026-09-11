@@ -1664,6 +1664,7 @@ const VIEWS = {
         <div class="lp-features" style="max-width:1100px;margin:0 auto;">
           ${[
             ['⚖️','Legal-Specific Event Types','Schedule depositions, mediations, opposing counsel calls, client meetings, settlement conferences, and more — with terminology your team and clients expect.'],
+            ['📅','Propose Exact Times, or Poll a Date Range','Propose specific dates and times when the slot matters, and each participant confirms which they can make. Or set a window — the next two weeks, say — and have everyone mark when they are free; LexSchedule finds every opening long enough to hold the proceeding.'],
             ['📧','Automated Professional Communications','Invitation, reminder, confirmation, and no-match notifications are sent automatically in a format befitting your firm\u2019s reputation.'],
             ['📊','Real-Time Availability Grid','An availability grid tailored for legal proceedings — see at a glance which dates work for all parties and identify the optimal time instantly.'],
             ['🗂️','Scheduling Dashboard for Every Matter','Track all of your matters in one place. See at a glance which proceedings are active, confirmed, still awaiting responses, or need attention — no chasing across inboxes to work out where each one stands.'],
