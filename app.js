@@ -40,6 +40,14 @@ const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>
 
 const initials = name => name.split(' ').map(w => w[0]).join('').slice(0,2).toUpperCase();
 
+// Time-of-day greeting, from the viewer's own clock.
+const greeting = (now = new Date()) => {
+  const h = now.getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
+  return 'Good evening';
+};
+
 /* ── Firebase ──────────────────────────────────────────── */
 firebase.initializeApp({
   apiKey: "AIzaSyAWAcepKB_7IyiLT8Hs5o5x4BVF6j3L-A8",
@@ -2017,7 +2025,7 @@ const VIEWS = {
       <!-- Page header -->
       <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:28px;gap:20px;">
         <div>
-          <p style="font-size:.7rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#9CA3AF;margin-bottom:4px;">Good morning, ${esc(S.user?.name?.split(' ')[0]||'Counselor')}${S.user?.assistantFor ? ` — Assisting ${esc(S.user.assistantFor)}` : ''}</p>
+          <p style="font-size:.7rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#9CA3AF;margin-bottom:4px;">${greeting()}, ${esc(S.user?.name?.split(' ')[0]||'Counselor')}${S.user?.assistantFor ? ` — Assisting ${esc(S.user.assistantFor)}` : ''}</p>
           <h1 style="font-family:'Cormorant Garamond',serif;font-size:2.2rem;font-weight:600;color:#0B1F3A;line-height:1.1;">Scheduling Dashboard</h1>
         </div>
         <button onclick="location.hash='/new'" style="padding:12px 26px;border:none;border-radius:8px;font-size:.8rem;font-weight:700;letter-spacing:.05em;text-transform:uppercase;cursor:pointer;background:#C09D5F;color:#0B1F3A;font-family:'Montserrat',sans-serif;box-shadow:0 4px 12px rgba(192,157,95,.3);white-space:nowrap;flex-shrink:0;transition:all .2s;" onmouseover="this.style.background='#d4b87a'" onmouseout="this.style.background='#C09D5F'">+ New Scheduling Event</button>
